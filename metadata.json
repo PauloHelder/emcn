@@ -1,0 +1,5 @@
+{
+  "name": "EMCN - Sistema de Gestão Escolar",
+  "description": "Sistema completo para gestão da Escola de Ministros Comunidade Nacional, com controle de alunos, professores, turmas, disciplinas, inscrições e frequências.",
+  "requestFramePermissions": []
+}
