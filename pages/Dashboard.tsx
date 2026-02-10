@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Teacher, Student, Discipline, ClassGroup } from '../types';
-import { Users, GraduationCap, BookOpen, Layers, TrendingUp, AlertCircle, ArrowRight } from 'lucide-react';
+import { Teacher, Student, Discipline, ClassGroup, School } from '../types';
+import { Users, GraduationCap, BookOpen, Layers, TrendingUp, AlertCircle, ArrowRight, School as SchoolIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface DashboardProps {
@@ -11,25 +11,26 @@ interface DashboardProps {
     students: Student[];
     disciplines: Discipline[];
     classes: ClassGroup[];
+    schools: School[];
   };
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
   const pendingEnrollments = stats.students.filter(s => s.status === 'INACTIVE').length;
-  
+
   const chartData = [
+    { name: 'Escolas', value: stats.schools.length },
     { name: 'Professores', value: stats.teachers.length },
     { name: 'Alunos Ativos', value: stats.students.filter(s => s.status === 'ACTIVE').length },
-    { name: 'Disciplinas', value: stats.disciplines.length },
     { name: 'Turmas', value: stats.classes.length },
   ];
 
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Alunos Ativos" value={stats.students.filter(s => s.status === 'ACTIVE').length} icon={Users} color="blue" />
-        <StatCard title="Professores" value={stats.teachers.length} icon={GraduationCap} color="gold" />
-        <StatCard title="Disciplinas" value={stats.disciplines.length} icon={BookOpen} color="blue" />
+        <StatCard title="Total de Escolas" value={stats.schools.length} icon={SchoolIcon} color="blue" />
+        <StatCard title="Alunos Ativos" value={stats.students.filter(s => s.status === 'ACTIVE').length} icon={Users} color="gold" />
+        <StatCard title="Professores" value={stats.teachers.length} icon={GraduationCap} color="blue" />
         <StatCard title="Turmas Atuais" value={stats.classes.length} icon={Layers} color="gold" />
       </div>
 

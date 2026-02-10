@@ -1,4 +1,11 @@
 
+export interface School {
+  id: string;
+  name: string;
+  city: string;
+  address: string;
+}
+
 export type UserRole = 'ADMIN' | 'TEACHER' | 'STUDENT';
 
 export interface User {
@@ -10,7 +17,7 @@ export interface User {
 }
 
 export interface Teacher extends User {
-  specialties: string[];
+  discipline_ids: string[];
   bio: string;
 }
 
@@ -41,6 +48,12 @@ export interface ClassGroup {
   year: number;
   students: string[]; // studentIds
   sessions: ClassSession[];
+  schoolId: string;
+  // Novos campos de configuração por turma
+  isEnrollmentOpen: boolean;
+  enrollmentDeadline?: string;
+  enrollmentMessage?: string;
+  enrollmentRequirements: string[];
 }
 
 export interface EnrollmentSettings {

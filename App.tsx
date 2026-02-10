@@ -13,7 +13,8 @@ import {
   ClipboardList,
   Settings,
   Bell,
-  UserPlus
+  UserPlus,
+  School as SchoolIcon
 } from 'lucide-react';
 import {
   MOCK_TEACHERS,
@@ -23,7 +24,7 @@ import {
   INITIAL_ENROLLMENT_SETTINGS,
   COLORS
 } from './constants';
-import { User, Teacher, Student, Discipline, ClassGroup, EnrollmentSettings } from './types';
+import { User, Teacher, Student, Discipline, ClassGroup, EnrollmentSettings, School } from './types';
 
 // Pages
 import LandingPage from './pages/LandingPage';
@@ -35,6 +36,8 @@ import DisciplinesPage from './pages/DisciplinesPage';
 import ClassesPage from './pages/ClassesPage';
 import EnrollmentPage from './pages/EnrollmentPage';
 import EnrollmentsManagementPage from './pages/EnrollmentsManagementPage';
+import SchoolsPage from './pages/SchoolsPage';
+import UnitsPage from './pages/UnitsPage';
 import { supabase } from './supabase';
 
 const App: React.FC = () => {
@@ -42,7 +45,9 @@ const App: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
   const [classes, setClasses] = useState<ClassGroup[]>([]);
+  const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [enrollmentSettings, setEnrollmentSettings] = useState<EnrollmentSettings>(INITIAL_ENROLLMENT_SETTINGS);
 
   const fetchAllData = async () => {
@@ -51,24 +56,61 @@ const App: React.FC = () => {
         { data: teachersData },
         { data: studentsData },
         { data: disciplinesData },
+        { data: schoolsData },
         { data: classesData }
       ] = await Promise.all([
         supabase.from('teachers').select('*'),
         supabase.from('students').select('*'),
         supabase.from('disciplines').select('*'),
+        supabase.from('schools').select('*'),
         supabase.from('classes').select('*')
       ]);
 
       if (teachersData) setTeachers(teachersData);
-      if (studentsData) setStudents(studentsData);
+      if (studentsData) {
+        setStudents(studentsData.map((s: any) => ({
+          ...s,
+          enrollmentDate: s.enrollment_date
+        })));
+      }
       if (disciplinesData) setDisciplines(disciplinesData);
-      if (classesData) setClasses(classesData);
+      if (schoolsData) setSchools(schoolsData);
+      if (classesData) {
+        setClasses(classesData.map((c: any) => ({
+          ...c,
+          isEnrollmentOpen: c.is_enrollment_open,
+          enrollmentDeadline: c.enrollment_deadline,
+          enrollmentMessage: c.enrollment_message,
+          enrollmentRequirements: c.enrollment_requirements || [],
+          schoolId: c.school_id
+        })));
+      }
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      const { data, error } = await supabase.from('system_settings').select('*').single();
+      if (error) {
+        console.warn('Configurações não encontradas ou erro:', error.message);
+        return;
+      }
+      if (data) {
+        setEnrollmentSettings({
+          isOpen: data.is_open,
+          deadline: data.deadline,
+          message: data.message
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao buscar configurações:', error);
+    }
+  };
+
   useEffect(() => {
+    fetchSettings(); // Fetch public settings on mount
     // Check active sessions and sets the user
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -118,8 +160,7 @@ const App: React.FC = () => {
       { path: '/professores', label: 'Professores', icon: GraduationCap },
       { path: '/alunos', label: 'Alunos', icon: Users },
       { path: '/disciplinas', label: 'Disciplinas', icon: BookOpen },
-      { path: '/turmas', label: 'Turmas', icon: Layers },
-      { path: '/configuracoes', label: 'Configurações', icon: Settings },
+      { path: '/escolas', label: 'Escolas', icon: SchoolIcon },
     ];
 
     return (
@@ -213,17 +254,33 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<LandingPage enrollmentSettings={enrollmentSettings} />} />
+        <Route path="/" element={<LandingPage enrollmentSettings={enrollmentSettings} classes={classes} schools={schools} />} />
+        <Route path="/unidades" element={<UnitsPage classes={classes} schools={schools} />} />
         <Route path="/login" element={!currentUser ? <LoginPage /> : <Navigate to="/dashboard" />} />
-        <Route path="/inscricao" element={<EnrollmentPage settings={enrollmentSettings} students={students} setStudents={setStudents} />} />
+        <Route path="/inscricao" element={<EnrollmentPage settings={enrollmentSettings} students={students} setStudents={setStudents} classes={classes} schools={schools} />} />
 
         {/* Private Routes */}
-        <Route path="/dashboard" element={currentUser ? <Layout><Dashboard stats={{ teachers, students, disciplines, classes }} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/dashboard" element={currentUser ? <Layout><Dashboard stats={{ teachers, students, disciplines, classes, schools }} /></Layout> : <Navigate to="/login" />} />
         <Route path="/inscricoes-gestao" element={currentUser ? <Layout><EnrollmentsManagementPage students={students} setStudents={setStudents} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/professores" element={currentUser ? <Layout><TeachersPage teachers={teachers} setTeachers={setTeachers} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/professores" element={currentUser ? <Layout><TeachersPage teachers={teachers} setTeachers={setTeachers} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
         <Route path="/alunos" element={currentUser ? <Layout><StudentsPage students={students} setStudents={setStudents} /></Layout> : <Navigate to="/login" />} />
         <Route path="/disciplinas" element={currentUser ? <Layout><DisciplinesPage disciplines={disciplines} setDisciplines={setDisciplines} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/turmas" element={currentUser ? <Layout><ClassesPage classes={classes} setClasses={setClasses} students={students} teachers={teachers} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/escolas" element={currentUser ? <Layout>
+          {selectedSchool ? (
+            <ClassesPage
+              classes={classes.filter(c => c.schoolId === selectedSchool.id)}
+              setClasses={setClasses}
+              students={students}
+              setStudents={setStudents}
+              teachers={teachers}
+              disciplines={disciplines}
+              selectedSchool={selectedSchool}
+              onBack={() => setSelectedSchool(null)}
+            />
+          ) : (
+            <SchoolsPage schools={schools} setSchools={setSchools} classes={classes} onSelectSchool={(s) => setSelectedSchool(s)} />
+          )}
+        </Layout> : <Navigate to="/login" />} />
         <Route path="/configuracoes" element={currentUser ? <Layout><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>
     </HashRouter>
@@ -232,6 +289,33 @@ const App: React.FC = () => {
 
 // Internal Settings Component for simplicity
 const ConfigPage: React.FC<{ settings: EnrollmentSettings; setSettings: React.Dispatch<React.SetStateAction<EnrollmentSettings>> }> = ({ settings, setSettings }) => {
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleSave = async () => {
+    setLoading(true);
+    setSuccess(false);
+    try {
+      const { error } = await supabase
+        .from('system_settings')
+        .update({
+          is_open: settings.isOpen,
+          deadline: settings.deadline,
+          message: settings.message,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 1); // Assuming a single row with ID 1
+
+      if (error) throw error;
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (error: any) {
+      alert('Erro ao salvar: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl bg-white p-8 rounded-xl shadow-sm border">
       <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
@@ -277,8 +361,12 @@ const ConfigPage: React.FC<{ settings: EnrollmentSettings; setSettings: React.Di
           </div>
         </div>
 
-        <button className="w-full bg-emcn-blue text-white py-3 rounded-lg font-bold hover:bg-slate-800 transition-colors">
-          Salvar Alterações
+        <button
+          onClick={handleSave}
+          disabled={loading}
+          className="w-full bg-emcn-blue text-white py-3 rounded-lg font-bold hover:bg-slate-800 transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Salvando...' : success ? 'Salvo com Sucesso!' : 'Salvar Alterações'}
         </button>
       </div>
     </div>
