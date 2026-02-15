@@ -66,32 +66,71 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
     setError('');
 
     try {
-      const newStudent = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        role: 'STUDENT' as const,
-        status: 'INACTIVE' as const,
-        enrollment_date: new Date().toISOString(),
-      };
-
-      const { data, error: insertError } = await supabase
+      // 1. Verificar se já existe um aluno com este e-mail
+      const { data: existingStudents, error: fetchError } = await supabase
         .from('students')
-        .insert([newStudent])
-        .select()
-        .single();
+        .select('*')
+        .eq('email', formData.email);
 
-      if (insertError) throw insertError;
+      if (fetchError) throw fetchError;
 
-      if (data) {
-        if (selectedClassId) {
-          const currentStudents = selectedClass.students || [];
-          await supabase.from('classes').update({
-            students: [...currentStudents, data.id]
-          }).eq('id', selectedClassId);
+      let studentData: any = existingStudents && existingStudents.length > 0 ? existingStudents[0] : null;
+
+      if (studentData) {
+        // 2. Verificar se já está inscrito NESTA turma específica
+        if (selectedClass?.students?.includes(studentData.id)) {
+          setError('Você já está inscrito nesta turma com este e-mail.');
+          setLoading(false);
+          return;
         }
 
-        setStudents(prev => [...prev, { ...data, enrollmentDate: data.enrollment_date } as Student]);
+        // Opcional: Atualizar dados de contato caso tenham mudado
+        await supabase
+          .from('students')
+          .update({ name: formData.name, phone: formData.phone })
+          .eq('id', studentData.id);
+      } else {
+        // 3. Novo aluno
+        const newStudent = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          role: 'STUDENT' as const,
+          status: 'INACTIVE' as const,
+          enrollment_date: new Date().toISOString(),
+        };
+
+        const { data, error: insertError } = await supabase
+          .from('students')
+          .insert([newStudent])
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        studentData = data;
+      }
+
+      // 4. Vincular o aluno (existente ou novo) à turma
+      if (studentData && selectedClassId) {
+        const currentStudents = selectedClass?.students || [];
+        const { error: updateError } = await supabase
+          .from('classes')
+          .update({
+            students: [...currentStudents, studentData.id]
+          })
+          .eq('id', selectedClassId);
+
+        if (updateError) throw updateError;
+
+        // Atualizar estado local (opcional/consistência)
+        setStudents(prev => {
+          const exists = prev.find(s => s.id === studentData.id);
+          if (exists) {
+            return prev.map(s => s.id === studentData.id ? { ...s, name: formData.name, phone: formData.phone } : s);
+          }
+          return [...prev, { ...studentData, enrollmentDate: studentData.enrollment_date } as Student];
+        });
+
         setSubmitted(true);
       }
     } catch (err: any) {

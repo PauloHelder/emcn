@@ -357,45 +357,92 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
 
               <div className="lg:col-span-3">
                 {selectedSession ? (
-                  <div className="bg-white rounded-2xl border shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="p-6 bg-slate-50 border-b flex flex-col md:flex-row justify-between gap-4">
+                  <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="p-8 bg-slate-50 border-b flex flex-col md:flex-row justify-between gap-6">
                       <div>
-                        <div className="text-xs font-bold text-emcn-gold uppercase mb-1">Chamada e Presença</div>
-                        <h3 className="text-xl font-bold">{getDisciplineName(selectedSession.disciplineId)}</h3>
-                        <div className="text-sm text-slate-500 mt-1">Data: {new Date(selectedSession.date).toLocaleDateString()} • Professor: {getTeacherName(selectedSession.teacherId)}</div>
+                        <div className="text-[10px] font-black text-emcn-gold uppercase tracking-[0.2em] mb-2">Registro de Frequência</div>
+                        <h3 className="text-2xl font-bold text-emcn-blue">{getDisciplineName(selectedSession.disciplineId)}</h3>
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1.5 text-sm text-slate-500 font-medium">
+                            <Calendar size={14} className="text-emcn-gold" /> {new Date(selectedSession.date).toLocaleDateString()}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-sm text-slate-500 font-medium">
+                            <User size={14} className="text-emcn-gold" /> {getTeacherName(selectedSession.teacherId)}
+                          </div>
+                        </div>
                       </div>
-                      <button className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold text-sm hover:bg-green-700 transition-all shadow-md">Finalizar Chamada</button>
+                      <button
+                        onClick={async () => {
+                          if (!selectedClass || !selectedSession) return;
+                          setLoading(true);
+                          try {
+                            const updatedSessions = selectedClass.sessions.map(s =>
+                              s.id === selectedSession.id ? selectedSession : s
+                            );
+                            const { error } = await supabase.from('classes').update({ sessions: updatedSessions }).eq('id', selectedClass.id);
+                            if (error) throw error;
+
+                            setClasses(prev => prev.map(c => c.id === selectedClass.id ? { ...c, sessions: updatedSessions } : c));
+                            alert('Chamada finalizada e salva com sucesso!');
+                          } catch (err: any) {
+                            alert('Erro ao salvar chamada: ' + err.message);
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                        disabled={loading}
+                        className="px-8 py-3 bg-green-600 text-white rounded-2xl font-bold text-sm hover:bg-green-700 transition-all shadow-xl shadow-green-200 flex items-center gap-2"
+                      >
+                        {loading ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                        Finalizar Chamada
+                      </button>
                     </div>
-                    <div className="p-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {selectedClass.students.map(sid => {
                           const isPresent = selectedSession.attendance[sid] === true;
                           return (
-                            <div key={sid} className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${isPresent ? 'border-green-100 bg-green-50/30' : 'border-slate-100 bg-white'
-                              }`}>
+                            <div
+                              key={sid}
+                              onClick={() => {
+                                const newAttendance = { ...selectedSession.attendance, [sid]: !isPresent };
+                                setSelectedSession({ ...selectedSession, attendance: newAttendance });
+                              }}
+                              className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all ${isPresent ? 'border-emcn-gold bg-emcn-gold/5 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200'
+                                }`}
+                            >
                               <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${isPresent ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${isPresent ? 'bg-emcn-gold text-white' : 'bg-slate-100 text-slate-400'
                                   }`}>
                                   {getStudentName(sid).charAt(0)}
                                 </div>
-                                <span className="font-semibold text-slate-800">{getStudentName(sid)}</span>
+                                <div>
+                                  <div className={`font-bold transition-colors ${isPresent ? 'text-emcn-blue' : 'text-slate-600'}`}>{getStudentName(sid)}</div>
+                                  <div className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">Matrícula Ativa</div>
+                                </div>
                               </div>
-                              <button
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${isPresent ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                                  }`}
-                              >
-                                {isPresent ? 'Presente' : 'Marcar Falta'}
-                              </button>
+                              <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isPresent ? 'bg-emcn-gold border-emcn-gold text-white' : 'bg-white border-slate-200'}`}>
+                                {isPresent && <Check size={14} strokeWidth={4} />}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
+                      {selectedClass.students.length === 0 && (
+                        <div className="py-20 text-center text-slate-400">
+                          <Users size={48} className="mx-auto mb-4 opacity-10" />
+                          <p className="font-medium">Não há alunos nesta turma para realizar a chamada.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
-                  <div className="h-64 flex flex-col items-center justify-center bg-slate-100 rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
-                    <ClipboardCheck size={48} className="mb-4 opacity-20" />
-                    <p className="font-medium text-lg">Selecione uma aula para realizar a chamada</p>
+                  <div className="h-96 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400 p-12">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                      <ClipboardCheck size={40} className="opacity-20" />
+                    </div>
+                    <h4 className="text-xl font-bold text-slate-800 mb-2">Pronto para a Chamada?</h4>
+                    <p className="text-slate-400 font-medium text-center max-w-xs leading-relaxed">Selecione uma aula no menu lateral para registrar a presença dos alunos.</p>
                   </div>
                 )}
               </div>

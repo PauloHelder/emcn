@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Student } from '../types';
 import { Plus, Search, Edit, Trash2, X, ChevronRight, Mail, Phone, Calendar, UserCheck, UserX } from 'lucide-react';
+import { supabase } from '../supabase';
 
 interface StudentsPageProps {
   students: Student[];
@@ -13,26 +14,60 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState<Partial<Student>>({ status: 'ACTIVE' });
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.id) {
-      setStudents(prev => prev.map(s => s.id === formData.id ? { ...s, ...formData } as Student : s));
-    } else {
-      const newStudent: Student = {
-        ...formData,
-        id: Math.random().toString(36).substr(2, 9),
-        role: 'STUDENT',
-        enrollmentDate: new Date().toISOString().split('T')[0],
-      } as Student;
-      setStudents(prev => [...prev, newStudent]);
+    try {
+      if (formData.id) {
+        const { error } = await supabase
+          .from('students')
+          .update({
+            name: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            status: formData.status
+          })
+          .eq('id', formData.id);
+
+        if (error) throw error;
+        setStudents(prev => prev.map(s => s.id === formData.id ? { ...s, ...formData } as Student : s));
+      } else {
+        const newStudent = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          status: formData.status,
+          role: 'STUDENT',
+          enrollment_date: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+          .from('students')
+          .insert([newStudent])
+          .select()
+          .single();
+
+        if (error) throw error;
+        setStudents(prev => [...prev, { ...data, enrollmentDate: data.enrollment_date } as Student]);
+      }
+      setShowForm(false);
+    } catch (err: any) {
+      alert('Erro ao salvar aluno: ' + err.message);
     }
-    setShowForm(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este aluno?')) {
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este aluno?')) return;
+    try {
+      const { error } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
       setStudents(prev => prev.filter(s => s.id !== id));
       if (selectedStudent?.id === id) setSelectedStudent(null);
+    } catch (err: any) {
+      alert('Erro ao excluir: ' + err.message);
     }
   };
 

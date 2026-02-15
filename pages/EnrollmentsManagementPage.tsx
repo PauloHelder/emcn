@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Student } from '../types';
 import { CheckCircle, XCircle, Search, Mail, Phone, Calendar, UserPlus, Trash2, Eye } from 'lucide-react';
+import { supabase } from '../supabase';
 
 interface EnrollmentsManagementPageProps {
   students: Student[];
@@ -12,13 +13,32 @@ const EnrollmentsManagementPage: React.FC<EnrollmentsManagementPageProps> = ({ s
   const [searchTerm, setSearchTerm] = useState('');
   const pendingStudents = students.filter(s => s.status === 'INACTIVE' && s.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  const approveEnrollment = (id: string) => {
-    setStudents(prev => prev.map(s => s.id === id ? { ...s, status: 'ACTIVE' } : s));
+  const approveEnrollment = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ status: 'ACTIVE' })
+        .eq('id', id);
+
+      if (error) throw error;
+      setStudents(prev => prev.map(s => s.id === id ? { ...s, status: 'ACTIVE' } : s));
+    } catch (err: any) {
+      alert('Erro ao aprovar: ' + err.message);
+    }
   };
 
-  const deleteEnrollment = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir esta inscrição?')) {
+  const deleteEnrollment = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta inscrição?')) return;
+    try {
+      const { error } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
       setStudents(prev => prev.filter(s => s.id !== id));
+    } catch (err: any) {
+      alert('Erro ao excluir: ' + err.message);
     }
   };
 
@@ -39,12 +59,12 @@ const EnrollmentsManagementPage: React.FC<EnrollmentsManagementPageProps> = ({ s
         <div className="p-4 border-b">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar por nome do candidato..." 
+            <input
+              type="text"
+              placeholder="Buscar por nome do candidato..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-1 focus:ring-emcn-gold outline-none" 
+              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-1 focus:ring-emcn-gold outline-none"
             />
           </div>
         </div>
@@ -91,14 +111,14 @@ const EnrollmentsManagementPage: React.FC<EnrollmentsManagementPageProps> = ({ s
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button 
+                        <button
                           onClick={() => approveEnrollment(student.id)}
                           title="Aprovar Aluno"
                           className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all shadow-sm"
                         >
                           <CheckCircle size={18} />
                         </button>
-                        <button 
+                        <button
                           onClick={() => deleteEnrollment(student.id)}
                           title="Rejeitar Inscrição"
                           className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-sm"

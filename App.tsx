@@ -38,6 +38,8 @@ import EnrollmentPage from './pages/EnrollmentPage';
 import EnrollmentsManagementPage from './pages/EnrollmentsManagementPage';
 import SchoolsPage from './pages/SchoolsPage';
 import UnitsPage from './pages/UnitsPage';
+import UsersPage from './pages/UsersPage';
+import ConfigPage from './pages/ConfigPage';
 import { supabase } from './supabase';
 
 const App: React.FC = () => {
@@ -121,12 +123,36 @@ const App: React.FC = () => {
           role: (session.user.user_metadata.role as any) || 'STUDENT',
         };
         setCurrentUser(user);
+
+        // Enrich in background
+        const enrichProfile = async (uid: string) => {
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', uid)
+              .single();
+
+            if (profile) {
+              setCurrentUser(prev => prev ? {
+                ...prev,
+                name: profile.name || prev.name,
+                role: profile.role || prev.role,
+                avatar: profile.avatar_url || prev.avatar
+              } : null);
+            }
+          } catch (err) {
+            console.warn('Initial profile enrichment failed:', err);
+          }
+        };
+        enrichProfile(session.user.id);
       }
     });
 
     // Listen for changes on auth state (sign in, sign out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
+        // Set basic info immediately to allow login
         const user: User = {
           id: session.user.id,
           name: session.user.user_metadata.name || session.user.email?.split('@')[0] || 'Usuário',
@@ -134,10 +160,34 @@ const App: React.FC = () => {
           role: (session.user.user_metadata.role as any) || 'STUDENT',
         };
         setCurrentUser(user);
-        fetchAllData(); // Fetch real data when user logs in
+
+        // Fetch detailed profile in background without blocking
+        const enrichProfile = async () => {
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+
+            if (profile) {
+              setCurrentUser(prev => prev ? {
+                ...prev,
+                name: profile.name || prev.name,
+                role: profile.role || prev.role,
+                avatar: profile.avatar_url || prev.avatar
+              } : null);
+            }
+          } catch (err) {
+            console.warn('Profile enrichment failed:', err);
+          }
+        };
+        enrichProfile();
       } else {
         setCurrentUser(null);
       }
+      // Always fetch data so landing page works for visitors
+      fetchAllData();
     });
 
     return () => subscription.unsubscribe();
@@ -156,12 +206,16 @@ const App: React.FC = () => {
 
     const navItems = [
       { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { path: '/inscricoes-gestao', label: 'Novas Inscrições', icon: UserPlus, badge: pendingEnrollmentsCount },
-      { path: '/professores', label: 'Professores', icon: GraduationCap },
-      { path: '/alunos', label: 'Alunos', icon: Users },
-      { path: '/disciplinas', label: 'Disciplinas', icon: BookOpen },
+      { path: '/inscricoes-gestao', label: 'Inscrições Pendentes', icon: UserPlus, badge: pendingEnrollmentsCount },
+      { path: '/professores', label: 'Corpo Docente', icon: GraduationCap },
+      { path: '/alunos', label: 'Gestão de Alunos', icon: Users },
+      { path: '/disciplinas', label: 'Matriz Curricular', icon: BookOpen },
       { path: '/escolas', label: 'Escolas', icon: SchoolIcon },
+      { path: '/usuarios', label: 'Usuários e Perfis', icon: ClipboardList, roles: ['ADMIN', 'SECRETARY'] },
+      { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['ADMIN'] },
     ];
+
+    const filteredNavItems = navItems.filter(item => !item.roles || (currentUser && item.roles.includes(currentUser.role)));
 
     return (
       <div className="min-h-screen flex bg-slate-50">
@@ -180,32 +234,32 @@ const App: React.FC = () => {
         `}>
           <div className="p-6 flex flex-col h-full">
             <div className="flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1 overflow-hidden">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1 overflow-hidden shadow-lg shadow-white/10">
+                <img src="https://emcn.com.br/wp-content/uploads/2021/04/cropped-LOGOTIPO-EMCN-1-192x192.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
-              <h1 className="font-serif text-xl text-emcn-gold tracking-wider">EMCN</h1>
+              <h1 className="font-serif text-xl text-emcn-gold tracking-wider font-bold">EMCN</h1>
             </div>
 
-            <nav className="flex-1 space-y-1">
-              {navItems.map((item) => (
+            <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-2">
+              {filteredNavItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={`
-                    flex items-center justify-between px-4 py-3 rounded-lg transition-colors
-                    ${location.pathname === item.path ? 'bg-emcn-gold/20 text-emcn-gold' : 'hover:bg-white/5'}
+                    flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200
+                    ${location.pathname === item.path ? 'bg-emcn-gold/20 text-emcn-gold border-l-4 border-emcn-gold pl-3' : 'hover:bg-white/5 text-slate-300 hover:text-white'}
                   `}
                 >
                   <div className="flex items-center gap-3">
-                    <item.icon size={20} />
-                    <span>{item.label}</span>
+                    <item.icon size={20} className={location.pathname === item.path ? 'text-emcn-gold' : ''} />
+                    <span className="font-medium">{item.label}</span>
                   </div>
-                  {item.badge > 0 && (
-                    <span className="bg-emcn-gold text-emcn-blue text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {item.badge && item.badge > 0 ? (
+                    <span className="bg-emcn-gold text-emcn-blue text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">
                       {item.badge}
                     </span>
-                  )}
+                  ) : null}
                 </Link>
               ))}
             </nav>
@@ -258,6 +312,7 @@ const App: React.FC = () => {
         <Route path="/unidades" element={<UnitsPage classes={classes} schools={schools} />} />
         <Route path="/login" element={!currentUser ? <LoginPage /> : <Navigate to="/dashboard" />} />
         <Route path="/inscricao" element={<EnrollmentPage settings={enrollmentSettings} students={students} setStudents={setStudents} classes={classes} schools={schools} />} />
+        <Route path="/usuarios" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY') ? <Layout><UsersPage /></Layout> : <Navigate to="/dashboard" />} />
 
         {/* Private Routes */}
         <Route path="/dashboard" element={currentUser ? <Layout><Dashboard stats={{ teachers, students, disciplines, classes, schools }} /></Layout> : <Navigate to="/login" />} />
@@ -281,95 +336,9 @@ const App: React.FC = () => {
             <SchoolsPage schools={schools} setSchools={setSchools} classes={classes} onSelectSchool={(s) => setSelectedSchool(s)} />
           )}
         </Layout> : <Navigate to="/login" />} />
-        <Route path="/configuracoes" element={currentUser ? <Layout><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>
     </HashRouter>
-  );
-};
-
-// Internal Settings Component for simplicity
-const ConfigPage: React.FC<{ settings: EnrollmentSettings; setSettings: React.Dispatch<React.SetStateAction<EnrollmentSettings>> }> = ({ settings, setSettings }) => {
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  const handleSave = async () => {
-    setLoading(true);
-    setSuccess(false);
-    try {
-      const { error } = await supabase
-        .from('system_settings')
-        .update({
-          is_open: settings.isOpen,
-          deadline: settings.deadline,
-          message: settings.message,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', 1); // Assuming a single row with ID 1
-
-      if (error) throw error;
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (error: any) {
-      alert('Erro ao salvar: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="max-w-2xl bg-white p-8 rounded-xl shadow-sm border">
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <Settings className="text-emcn-gold" />
-        Configurações do Sistema
-      </h2>
-
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Módulo de Autoinscrição</h3>
-          <div className="grid gap-4">
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">
-              <div>
-                <div className="font-medium text-slate-800">Status das Inscrições</div>
-                <div className="text-sm text-slate-500">Permitir que novos alunos se inscrevam pelo site.</div>
-              </div>
-              <button
-                onClick={() => setSettings(prev => ({ ...prev, isOpen: !prev.isOpen }))}
-                className={`w-12 h-6 rounded-full transition-colors relative ${settings.isOpen ? 'bg-green-500' : 'bg-slate-300'}`}
-              >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.isOpen ? 'left-7' : 'left-1'}`} />
-              </button>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data Limite de Cadastro</label>
-              <input
-                type="date"
-                value={settings.deadline}
-                onChange={(e) => setSettings(prev => ({ ...prev, deadline: e.target.value }))}
-                className="w-full p-2 border rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Mensagem de Boas-vindas/Instruções</label>
-              <textarea
-                value={settings.message}
-                onChange={(e) => setSettings(prev => ({ ...prev, message: e.target.value }))}
-                className="w-full p-2 border rounded-lg h-24"
-              />
-            </div>
-          </div>
-        </div>
-
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="w-full bg-emcn-blue text-white py-3 rounded-lg font-bold hover:bg-slate-800 transition-colors disabled:opacity-50"
-        >
-          {loading ? 'Salvando...' : success ? 'Salvo com Sucesso!' : 'Salvar Alterações'}
-        </button>
-      </div>
-    </div>
   );
 };
 

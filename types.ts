@@ -6,7 +6,17 @@ export interface School {
   address: string;
 }
 
-export type UserRole = 'ADMIN' | 'TEACHER' | 'STUDENT';
+export type UserRole = 'ADMIN' | 'SECRETARY' | 'TEACHER' | 'STUDENT';
+
+export interface Permission {
+  id: string;
+  role: UserRole;
+  module: string; // e.g., 'STUDENTS', 'CLASSES', 'FINANCE'
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
 
 export interface User {
   id: string;
@@ -14,6 +24,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
 }
 
 export interface Teacher extends User {
