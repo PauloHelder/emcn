@@ -42,6 +42,121 @@ import UsersPage from './pages/UsersPage';
 import ConfigPage from './pages/ConfigPage';
 import { supabase } from './supabase';
 
+interface LayoutProps {
+  children: React.ReactNode;
+  currentUser: User | null;
+  students: Student[];
+  handleLogout: () => Promise<void>;
+}
+
+const Layout: React.FC<LayoutProps> = ({ children, currentUser, students, handleLogout }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  const pendingEnrollmentsCount = students.filter(s => s.status === 'INACTIVE').length;
+
+  const navItems = [
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/inscricoes-gestao', label: 'Inscrições Pendentes', icon: UserPlus, badge: pendingEnrollmentsCount },
+    { path: '/professores', label: 'Corpo Docente', icon: GraduationCap },
+    { path: '/alunos', label: 'Gestão de Alunos', icon: Users },
+    { path: '/disciplinas', label: 'Matriz Curricular', icon: BookOpen },
+    { path: '/escolas', label: 'Escolas', icon: SchoolIcon },
+    { path: '/usuarios', label: 'Usuários e Perfis', icon: ClipboardList, roles: ['ADMIN', 'SECRETARY'] },
+    { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['ADMIN'] },
+  ];
+
+  const filteredNavItems = navItems.filter(item => !item.roles || (currentUser && item.roles.includes(currentUser.role)));
+
+  return (
+    <div className="min-h-screen flex bg-slate-50">
+      {/* Sidebar Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed inset-y-0 left-0 w-64 bg-emcn-blue text-white z-50 transform transition-transform duration-200 ease-in-out
+        lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="p-6 flex flex-col h-full">
+          <div className="flex items-center gap-3 mb-10">
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1 overflow-hidden shadow-lg shadow-white/10">
+              <img src="https://emcn.com.br/wp-content/uploads/2021/04/cropped-LOGOTIPO-EMCN-1-192x192.png" alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <h1 className="font-serif text-xl text-emcn-gold tracking-wider font-bold">EMCN</h1>
+          </div>
+
+          <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-2">
+            {filteredNavItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setSidebarOpen(false)}
+                className={`
+                  flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200
+                  ${location.pathname === item.path ? 'bg-emcn-gold/20 text-emcn-gold border-l-4 border-emcn-gold pl-3' : 'hover:bg-white/5 text-slate-300 hover:text-white'}
+                `}
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon size={20} className={location.pathname === item.path ? 'text-emcn-gold' : ''} />
+                  <span className="font-medium">{item.label}</span>
+                </div>
+                {item.badge && item.badge > 0 ? (
+                  <span className="bg-emcn-gold text-emcn-blue text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">
+                    {item.badge}
+                  </span>
+                ) : null}
+              </Link>
+            ))}
+          </nav>
+
+          <button
+            onClick={handleLogout}
+            className="mt-auto flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-red-500/20 text-red-300 transition-colors"
+          >
+            <LogOut size={20} />
+            <span>Sair</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+        <header className="h-16 bg-white border-b flex items-center justify-between px-6 sticky top-0 z-30 shrink-0">
+          <button className="lg:hidden text-emcn-blue" onClick={() => setSidebarOpen(true)}>
+            <Menu size={24} />
+          </button>
+          <div className="hidden lg:block text-slate-500 font-medium">
+            Escola de Ministros Comunidade Nacional
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="p-2 text-slate-400 hover:text-emcn-blue"><Bell size={20} /></button>
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <div className="text-sm font-semibold">{currentUser?.name}</div>
+                <div className="text-xs text-slate-500 capitalize">{currentUser?.role.toLowerCase()}</div>
+              </div>
+              <div className="w-9 h-9 bg-emcn-gold rounded-full flex items-center justify-center text-white font-bold">
+                {currentUser?.name.charAt(0)}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-6 overflow-y-auto flex-1">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -198,112 +313,7 @@ const App: React.FC = () => {
     setCurrentUser(null);
   };
 
-  const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const location = useLocation();
 
-    const pendingEnrollmentsCount = students.filter(s => s.status === 'INACTIVE').length;
-
-    const navItems = [
-      { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { path: '/inscricoes-gestao', label: 'Inscrições Pendentes', icon: UserPlus, badge: pendingEnrollmentsCount },
-      { path: '/professores', label: 'Corpo Docente', icon: GraduationCap },
-      { path: '/alunos', label: 'Gestão de Alunos', icon: Users },
-      { path: '/disciplinas', label: 'Matriz Curricular', icon: BookOpen },
-      { path: '/escolas', label: 'Escolas', icon: SchoolIcon },
-      { path: '/usuarios', label: 'Usuários e Perfis', icon: ClipboardList, roles: ['ADMIN', 'SECRETARY'] },
-      { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['ADMIN'] },
-    ];
-
-    const filteredNavItems = navItems.filter(item => !item.roles || (currentUser && item.roles.includes(currentUser.role)));
-
-    return (
-      <div className="min-h-screen flex bg-slate-50">
-        {/* Sidebar Mobile Overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        {/* Sidebar */}
-        <aside className={`
-          fixed inset-y-0 left-0 w-64 bg-emcn-blue text-white z-50 transform transition-transform duration-200 ease-in-out
-          lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}>
-          <div className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1 overflow-hidden shadow-lg shadow-white/10">
-                <img src="https://emcn.com.br/wp-content/uploads/2021/04/cropped-LOGOTIPO-EMCN-1-192x192.png" alt="Logo" className="w-full h-full object-contain" />
-              </div>
-              <h1 className="font-serif text-xl text-emcn-gold tracking-wider font-bold">EMCN</h1>
-            </div>
-
-            <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-2">
-              {filteredNavItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`
-                    flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200
-                    ${location.pathname === item.path ? 'bg-emcn-gold/20 text-emcn-gold border-l-4 border-emcn-gold pl-3' : 'hover:bg-white/5 text-slate-300 hover:text-white'}
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    <item.icon size={20} className={location.pathname === item.path ? 'text-emcn-gold' : ''} />
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                  {item.badge && item.badge > 0 ? (
-                    <span className="bg-emcn-gold text-emcn-blue text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </Link>
-              ))}
-            </nav>
-
-            <button
-              onClick={handleLogout}
-              className="mt-auto flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-red-500/20 text-red-300 transition-colors"
-            >
-              <LogOut size={20} />
-              <span>Sair</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
-          <header className="h-16 bg-white border-b flex items-center justify-between px-6 sticky top-0 z-30 shrink-0">
-            <button className="lg:hidden text-emcn-blue" onClick={() => setSidebarOpen(true)}>
-              <Menu size={24} />
-            </button>
-            <div className="hidden lg:block text-slate-500 font-medium">
-              Escola de Ministros Comunidade Nacional
-            </div>
-            <div className="flex items-center gap-4">
-              <button className="p-2 text-slate-400 hover:text-emcn-blue"><Bell size={20} /></button>
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <div className="text-sm font-semibold">{currentUser?.name}</div>
-                  <div className="text-xs text-slate-500 capitalize">{currentUser?.role.toLowerCase()}</div>
-                </div>
-                <div className="w-9 h-9 bg-emcn-gold rounded-full flex items-center justify-center text-white font-bold">
-                  {currentUser?.name.charAt(0)}
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <div className="p-6 overflow-y-auto flex-1">
-            {children}
-          </div>
-        </main>
-      </div>
-    );
-  };
 
   return (
     <HashRouter>
@@ -312,15 +322,15 @@ const App: React.FC = () => {
         <Route path="/unidades" element={<UnitsPage classes={classes} schools={schools} />} />
         <Route path="/login" element={!currentUser ? <LoginPage /> : <Navigate to="/dashboard" />} />
         <Route path="/inscricao" element={<EnrollmentPage settings={enrollmentSettings} students={students} setStudents={setStudents} classes={classes} schools={schools} />} />
-        <Route path="/usuarios" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY') ? <Layout><UsersPage /></Layout> : <Navigate to="/dashboard" />} />
+        <Route path="/usuarios" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><UsersPage /></Layout> : <Navigate to="/dashboard" />} />
 
         {/* Private Routes */}
-        <Route path="/dashboard" element={currentUser ? <Layout><Dashboard stats={{ teachers, students, disciplines, classes, schools }} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/inscricoes-gestao" element={currentUser ? <Layout><EnrollmentsManagementPage students={students} setStudents={setStudents} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/professores" element={currentUser ? <Layout><TeachersPage teachers={teachers} setTeachers={setTeachers} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/alunos" element={currentUser ? <Layout><StudentsPage students={students} setStudents={setStudents} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/disciplinas" element={currentUser ? <Layout><DisciplinesPage disciplines={disciplines} setDisciplines={setDisciplines} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/escolas" element={currentUser ? <Layout>
+        <Route path="/dashboard" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><Dashboard stats={{ teachers, students, disciplines, classes, schools }} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/inscricoes-gestao" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><EnrollmentsManagementPage students={students} setStudents={setStudents} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/professores" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><TeachersPage teachers={teachers} setTeachers={setTeachers} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/alunos" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><StudentsPage students={students} setStudents={setStudents} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/disciplinas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><DisciplinesPage disciplines={disciplines} setDisciplines={setDisciplines} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/escolas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}>
           {selectedSchool ? (
             <ClassesPage
               classes={classes.filter(c => c.schoolId === selectedSchool.id)}
@@ -336,7 +346,7 @@ const App: React.FC = () => {
             <SchoolsPage schools={schools} setSchools={setSchools} classes={classes} onSelectSchool={(s) => setSelectedSchool(s)} />
           )}
         </Layout> : <Navigate to="/login" />} />
-        <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>
     </HashRouter>
   );
