@@ -8,7 +8,7 @@ const UsersPage: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState<Partial<User>>({ role: 'STUDENT', status: 'ACTIVE' });
+    const [formData, setFormData] = useState<Partial<User> & { password?: string }>({ role: 'STUDENT', status: 'ACTIVE', password: '' });
     const [saving, setSaving] = useState(false);
 
     const [searchingEmail, setSearchingEmail] = useState(false);
@@ -66,19 +66,43 @@ const UsersPage: React.FC = () => {
             };
 
             if (formData.id) {
+                // Update existing profile
                 const { error } = await supabase
                     .from('profiles')
                     .update(payload)
                     .eq('id', formData.id);
                 if (error) throw error;
             } else {
-                const { error } = await supabase
-                    .from('profiles')
-                    .upsert([{
-                        ...payload,
-                        id: formData.id || undefined // Let DB handle if new
-                    }], { onConflict: 'email' });
-                if (error) throw error;
+                // Create new user in Auth
+                if (!formData.password) throw new Error('A senha é obrigatória para novos usuários.');
+
+                const { data: authData, error: authError } = await supabase.auth.signUp({
+                    email: formData.email!,
+                    password: formData.password!,
+                    options: {
+                        data: {
+                            name: formData.name,
+                            role: formData.role,
+                            status: formData.status
+                        }
+                    }
+                });
+
+                if (authError) throw authError;
+
+                // Sync with profiles if trigger doesn't exist (Supabase might already do this if trigger is set)
+                // We attempt to update the newly created profile with the extra metadata
+                if (authData.user) {
+                    const { error: profileError } = await supabase
+                        .from('profiles')
+                        .update({
+                            name: formData.name,
+                            role: formData.role,
+                            status: formData.status
+                        })
+                        .eq('id', authData.user.id);
+                    // We don't throw here because if a trigger created the profile, this update is just extra insurance
+                }
             }
             setShowForm(false);
             fetchUsers();
@@ -124,7 +148,7 @@ const UsersPage: React.FC = () => {
                         />
                     </div>
                     <button
-                        onClick={() => { setFormData({ role: 'STUDENT', status: 'ACTIVE' }); setShowForm(true); }}
+                        onClick={() => { setFormData({ role: 'STUDENT', status: 'ACTIVE', password: '' }); setShowForm(true); }}
                         className="px-4 py-2 bg-emcn-blue text-white rounded-lg flex items-center gap-2 font-semibold shadow-md hover:bg-slate-800 transition-colors shrink-0"
                     >
                         <Plus size={18} /> Novo Usuário
@@ -202,6 +226,19 @@ const UsersPage: React.FC = () => {
                                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Nome Completo</label>
                                 <input required value={formData.name || ''} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} className="w-full px-4 py-2 border-2 border-slate-50 rounded-xl focus:border-emcn-gold outline-none" />
                             </div>
+                            {!formData.id && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Senha Inicial</label>
+                                    <input
+                                        required
+                                        type="password"
+                                        placeholder="Mínimo 6 caracteres"
+                                        value={formData.password || ''}
+                                        onChange={(e) => setFormData(p => ({ ...p, password: e.target.value }))}
+                                        className="w-full px-4 py-2 border-2 border-slate-50 rounded-xl focus:border-emcn-gold outline-none"
+                                    />
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Perfil / Role</label>
