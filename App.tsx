@@ -367,7 +367,7 @@ const App: React.FC = () => {
             <SchoolsPage schools={schools} setSchools={setSchools} classes={classes} onSelectSchool={(s) => setSelectedSchool(s)} />
           )}
         </Layout> : <Navigate to="/login" />} />
-        <Route path="/provas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamsPage classes={classes} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/provas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamsPage classes={classes} disciplines={disciplines} schools={schools} /></Layout> : <Navigate to="/login" />} />
         <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>
     </HashRouter>

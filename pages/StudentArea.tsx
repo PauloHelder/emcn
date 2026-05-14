@@ -15,7 +15,8 @@ import {
   ArrowRight,
   FileText,
   Target,
-  LayoutDashboard
+  LayoutDashboard,
+  Check
 } from 'lucide-react';
 import { supabase } from '../supabase';
 
@@ -32,9 +33,15 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'AULAS' | 'NOTAS'>('AULAS');
+  const [activeTab, setActiveTab] = useState<'AULAS' | 'NOTAS' | 'PROVAS'>('AULAS');
   const [studentProfileId, setStudentProfileId] = useState<string | null>(null);
   const [studentStatus, setStudentStatus] = useState<string>('ACTIVE');
+
+  // Exam taking state
+  const [examInProgress, setExamInProgress] = useState<Exam | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [submittingExam, setSubmittingExam] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -149,6 +156,59 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
       alert('Erro ao registrar presença: ' + err.message);
     } finally {
       setCheckingIn(null);
+    }
+  };
+
+  const handleSubmitExam = async () => {
+    if (!examInProgress || !studentProfileId) return;
+    
+    const questions = examInProgress.questions || [];
+    if (Object.keys(answers).length < questions.length) {
+      if (!window.confirm("Você não respondeu todas as questões. Deseja enviar assim mesmo?")) {
+        return;
+      }
+    }
+
+    setSubmittingExam(true);
+    try {
+      // Calculate score
+      let correctCount = 0;
+      questions.forEach((q, idx) => {
+        if (answers[idx] === q.correctIndex) {
+          correctCount++;
+        }
+      });
+
+      const score = questions.length > 0 
+        ? (correctCount / questions.length) * examInProgress.maxScore 
+        : 0;
+
+      const { error } = await supabase.from('grades').insert({
+        exam_id: examInProgress.id,
+        student_id: studentProfileId,
+        score: score,
+        comments: `Prova realizada online em ${new Date().toLocaleString()}`
+      });
+
+      if (error) throw error;
+
+      alert(`Prova enviada com sucesso! Sua nota: ${score.toFixed(1)}`);
+      
+      // Update local grades
+      const newGrade = { 
+        id: 'temp-' + Date.now(), 
+        examId: examInProgress.id, 
+        studentId: studentProfileId, 
+        score 
+      };
+      setGrades(prev => [...prev, newGrade]);
+      setExamInProgress(null);
+      setActiveTab('NOTAS');
+      
+    } catch (err: any) {
+      alert('Erro ao enviar prova: ' + err.message);
+    } finally {
+      setSubmittingExam(false);
     }
   };
 
@@ -270,6 +330,12 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
           <Calendar size={18} /> Aulas e Frequência
         </button>
         <button 
+          onClick={() => setActiveTab('PROVAS')}
+          className={`px-8 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'PROVAS' ? 'bg-emcn-blue text-white shadow-lg shadow-emcn-blue/20' : 'text-slate-500 hover:text-slate-800'}`}
+        >
+          <FileText size={18} /> Provas Ativas
+        </button>
+        <button 
           onClick={() => setActiveTab('NOTAS')}
           className={`px-8 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'NOTAS' ? 'bg-emcn-blue text-white shadow-lg shadow-emcn-blue/20' : 'text-slate-500 hover:text-slate-800'}`}
         >
@@ -352,6 +418,63 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
                 })}
               </div>
             </>
+          ) : activeTab === 'PROVAS' ? (
+            <>
+              <div className="flex items-center justify-between px-2">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <FileText className="text-emcn-gold" /> Provas Disponíveis
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {exams.filter(e => e.classId === selectedClass?.id && e.status === 'ACTIVE').map(exam => {
+                  const alreadyTaken = grades.some(g => g.examId === exam.id);
+                  const discipline = disciplines.find(d => d.id === exam.disciplineId);
+                  
+                  return (
+                    <div key={exam.id} className="bg-white p-8 rounded-[32px] border shadow-sm flex flex-col sm:flex-row justify-between items-center gap-6">
+                      <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-emcn-gold/10 rounded-2xl flex items-center justify-center text-emcn-gold">
+                          <Target size={32} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-lg">{exam.title}</h4>
+                          <p className="text-sm text-slate-500 font-medium">{discipline?.name || 'Disciplina'}</p>
+                          <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
+                            <Clock size={12} /> Prazo: {new Date(exam.dueDate || exam.date).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="w-full sm:w-auto">
+                        {alreadyTaken ? (
+                          <div className="flex items-center gap-2 bg-green-50 text-green-700 px-6 py-3 rounded-2xl font-bold text-sm">
+                            <CheckCircle2 size={18} /> Prova Realizada
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setExamInProgress(exam);
+                              setCurrentQuestionIndex(0);
+                              setAnswers({});
+                            }}
+                            className="w-full bg-emcn-blue text-white px-8 py-3 rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emcn-blue/20"
+                          >
+                            <ArrowRight size={18} /> Fazer Prova
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {exams.filter(e => e.classId === selectedClass?.id && e.status === 'ACTIVE').length === 0 && (
+                  <div className="py-20 text-center bg-white rounded-[32px] border-2 border-dashed border-slate-200 text-slate-400">
+                    <FileText size={48} className="mx-auto mb-4 opacity-20" />
+                    <p>Nenhuma prova ativa disponível para sua turma.</p>
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             <>
               <div className="flex items-center justify-between px-2">
@@ -361,48 +484,44 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {exams.map(exam => {
-                  const grade = grades.find(g => g.examId === exam.id);
-                  const discipline = disciplines.find(d => d.id === exam.disciplineId);
+                {grades.map(grade => {
+                  const exam = exams.find(e => e.id === grade.examId);
+                  const discipline = exam ? disciplines.find(d => d.id === exam.disciplineId) : null;
                   
                   return (
-                    <div key={exam.id} className="bg-white p-8 rounded-[32px] border shadow-sm flex flex-col sm:flex-row justify-between items-center gap-6">
+                    <div key={grade.id} className="bg-white p-8 rounded-[32px] border shadow-sm flex flex-col sm:flex-row justify-between items-center gap-6">
                       <div className="flex items-center gap-6">
                         <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-emcn-gold">
                           <FileText size={32} />
                         </div>
                         <div>
-                          <h4 className="font-bold text-slate-800 text-lg">{exam.title}</h4>
+                          <h4 className="font-bold text-slate-800 text-lg">{exam?.title || 'Avaliação'}</h4>
                           <p className="text-sm text-slate-500 font-medium">{discipline?.name || 'Disciplina'}</p>
                           <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
-                            <Calendar size={12} /> {new Date(exam.date).toLocaleDateString()}
+                            <Calendar size={12} /> {exam ? new Date(exam.date).toLocaleDateString() : 'N/A'}
                           </div>
                         </div>
                       </div>
                       
                       <div className="text-center sm:text-right bg-slate-50 sm:bg-transparent p-6 sm:p-0 rounded-2xl w-full sm:w-auto">
-                        {grade ? (
-                          <div className="space-y-1">
-                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sua Nota</div>
-                            <div className="text-4xl font-serif font-black text-emcn-blue">
-                              {grade.score.toFixed(1)}
-                              <span className="text-lg text-slate-300 font-sans ml-1">/ {exam.maxScore}</span>
-                            </div>
-                            <div className={`text-xs font-bold ${grade.score >= (exam.maxScore * 0.7) ? 'text-green-600' : 'text-red-500'}`}>
-                              {grade.score >= (exam.maxScore * 0.7) ? 'Aprovado' : 'Abaixo da Média'}
-                            </div>
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sua Nota</div>
+                          <div className="text-4xl font-serif font-black text-emcn-blue">
+                            {grade.score.toFixed(1)}
+                            <span className="text-lg text-slate-300 font-sans ml-1">/ {exam?.maxScore || 10}</span>
                           </div>
-                        ) : (
-                          <div className="text-slate-300 italic text-sm font-medium">Nota não lançada</div>
-                        )}
+                          <div className={`text-xs font-bold ${grade.score >= ((exam?.maxScore || 10) * 0.7) ? 'text-green-600' : 'text-red-500'}`}>
+                            {grade.score >= ((exam?.maxScore || 10) * 0.7) ? 'Aprovado' : 'Abaixo da Média'}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
                 })}
-                {exams.length === 0 && (
+                {grades.length === 0 && (
                   <div className="py-20 text-center bg-white rounded-[32px] border-2 border-dashed border-slate-200 text-slate-400">
                     <Award size={48} className="mx-auto mb-4 opacity-20" />
-                    <p>Nenhuma avaliação cadastrada até o momento.</p>
+                    <p>Você ainda não possui notas lançadas.</p>
                   </div>
                 )}
               </div>
@@ -442,6 +561,127 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
           </div>
         </div>
       </div>
+      {/* Exam In Progress Overlay */}
+      {examInProgress && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="bg-emcn-blue p-8 text-white relative flex-shrink-0">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-2xl font-serif">{examInProgress.title}</h3>
+                  <p className="text-white/60 text-sm mt-1">{getDisciplineName(examInProgress.disciplineId)} • Questão {currentQuestionIndex + 1} de {examInProgress.questions?.length || 0}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emcn-gold mb-1">Nota Máxima</p>
+                  <p className="text-2xl font-bold">{examInProgress.maxScore}</p>
+                </div>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="mt-8 bg-white/10 h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-emcn-gold h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${((currentQuestionIndex + 1) / (examInProgress.questions?.length || 1)) * 100}%` }} 
+                />
+              </div>
+            </div>
+
+            {/* Question Body */}
+            <div className="p-10 flex-1 overflow-y-auto">
+              {examInProgress.questions && examInProgress.questions[currentQuestionIndex] ? (
+                <div className="space-y-8">
+                  <h4 className="text-2xl font-bold text-slate-800 leading-tight">
+                    {examInProgress.questions[currentQuestionIndex].text}
+                  </h4>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {examInProgress.questions[currentQuestionIndex].options.map((option, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setAnswers({ ...answers, [currentQuestionIndex]: idx })}
+                        className={`group p-6 rounded-3xl border-2 transition-all flex items-center gap-6 text-left ${
+                          answers[currentQuestionIndex] === idx
+                            ? 'border-emcn-gold bg-emcn-gold/5 shadow-lg shadow-emcn-gold/10'
+                            : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg transition-all ${
+                          answers[currentQuestionIndex] === idx
+                            ? 'bg-emcn-gold text-white scale-110'
+                            : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
+                        }`}>
+                          {String.fromCharCode(65 + idx)}
+                        </div>
+                        <span className={`text-lg font-medium flex-1 ${
+                          answers[currentQuestionIndex] === idx ? 'text-slate-800' : 'text-slate-600'
+                        }`}>
+                          {option}
+                        </span>
+                        {answers[currentQuestionIndex] === idx && (
+                          <div className="w-6 h-6 bg-emcn-gold rounded-full flex items-center justify-center text-white">
+                            <Check size={14} strokeWidth={4} />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-20 text-slate-400">
+                  <AlertCircle size={48} className="mx-auto mb-4 opacity-20" />
+                  <p>Questão não localizada.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-6 flex-shrink-0">
+              <button
+                onClick={() => {
+                  if (window.confirm("Deseja realmente sair? Seu progresso nesta prova será perdido.")) {
+                    setExamInProgress(null);
+                  }
+                }}
+                className="text-slate-400 font-bold hover:text-red-500 transition-colors"
+              >
+                Sair da Prova
+              </button>
+
+              <div className="flex gap-4 w-full sm:w-auto">
+                <button
+                  disabled={currentQuestionIndex === 0}
+                  onClick={() => setCurrentQuestionIndex(prev => prev - 1)}
+                  className={`px-8 py-4 rounded-2xl font-bold transition-all flex items-center gap-2 ${
+                    currentQuestionIndex === 0 
+                      ? 'text-slate-300 cursor-not-allowed' 
+                      : 'bg-white border text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Anterior
+                </button>
+
+                {currentQuestionIndex < (examInProgress.questions?.length || 0) - 1 ? (
+                  <button
+                    onClick={() => setCurrentQuestionIndex(prev => prev + 1)}
+                    className="flex-1 sm:flex-none px-12 py-4 bg-emcn-blue text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-emcn-blue/20"
+                  >
+                    Próxima Questão
+                  </button>
+                ) : (
+                  <button
+                    disabled={submittingExam}
+                    onClick={handleSubmitExam}
+                    className="flex-1 sm:flex-none px-12 py-4 bg-emcn-gold text-emcn-blue rounded-2xl font-bold hover:bg-[#b08e4d] transition-all shadow-xl shadow-emcn-gold/20 flex items-center justify-center gap-2"
+                  >
+                    {submittingExam ? <Loader2 size={20} className="animate-spin" /> : 'Finalizar Prova'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

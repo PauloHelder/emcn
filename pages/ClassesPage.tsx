@@ -23,6 +23,7 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
   const [selectedClass, setSelectedClass] = useState<ClassGroup | null>(null);
   const [view, setView] = useState<'DETAILS' | 'ATTENDANCE' | 'PROGRAM' | 'SETTINGS' | 'EXAMS'>('DETAILS');
   const [showAddClass, setShowAddClass] = useState(false);
+  const [editingClass, setEditingClass] = useState<ClassGroup | null>(null);
   const [selectedSession, setSelectedSession] = useState<ClassSession | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
@@ -109,7 +110,7 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    if (!selectedClass || !confirm('Excluir esta aula do programa?')) return;
+    if (!selectedClass || !window.confirm('Excluir esta aula do programa?')) return;
     setLoading(true);
     try {
       const updatedSessions = selectedClass.sessions.filter(s => s.id !== sessionId);
@@ -125,6 +126,20 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
       setLoading(false);
     }
   };
+
+  const handleDeleteClass = async (e: React.MouseEvent, classId: string) => {
+    e.stopPropagation();
+    if (!window.confirm('Tem certeza que deseja excluir esta turma?')) return;
+    try {
+      const { error } = await supabase.from('classes').delete().eq('id', classId);
+      if (error) throw error;
+      setClasses(prev => prev.filter(c => c.id !== classId));
+      if (selectedClass?.id === classId) setSelectedClass(null);
+    } catch (err: any) {
+      alert('Erro ao excluir turma: ' + err.message);
+    }
+  };
+
 
   // Filter teachers based on selected discipline
   const availableTeachers = sessionFormData.disciplineId
@@ -163,7 +178,25 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="p-3 bg-emcn-blue/5 text-emcn-blue rounded-xl"><Layers size={24} /></div>
-                  <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{c.year}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{c.year}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingClass(c);
+                        setShowAddClass(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-emcn-blue hover:bg-emcn-blue/10 rounded-lg transition-all"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteClass(e, c.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
                 <h3 className="text-xl font-bold text-slate-800 mb-2">{c.name}</h3>
                 <div className="flex items-center gap-4 mt-4 text-sm text-slate-500">
@@ -229,7 +262,7 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                     };
 
                     return (
-                      <div key={sid} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                      <div key={student.id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
                         <div className="flex items-center gap-4">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 ${student.status === 'ACTIVE' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-emcn-gold/10 text-emcn-gold border-emcn-gold/20'
                             }`}>
@@ -884,48 +917,73 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-200">
             <div className="bg-emcn-blue p-6 text-white flex justify-between items-center">
-              <h3 className="text-xl font-bold">Criar Nova Turma</h3>
-              <button onClick={() => setShowAddClass(false)} className="hover:bg-white/10 p-1 rounded-lg"><X /></button>
+              <h3 className="text-xl font-bold">{editingClass ? 'Editar Turma' : 'Criar Nova Turma'}</h3>
+              <button onClick={() => { setShowAddClass(false); setEditingClass(null); }} className="hover:bg-white/10 p-1 rounded-lg"><X /></button>
             </div>
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
-                const newClass = {
-                  name: formData.get('name') as string,
-                  year: parseInt(formData.get('year') as string),
-                  students: [],
-                  sessions: [],
-                  is_enrollment_open: false,
-                  enrollment_requirements: [],
-                  school_id: selectedSchool?.id
-                };
-
-                const { data, error } = await supabase.from('classes').insert([newClass]).select().single();
-                if (!error && data) {
-                  const mapped = {
-                    ...data,
-                    isEnrollmentOpen: data.is_enrollment_open,
-                    enrollmentRequirements: data.enrollment_requirements || [],
-                    schoolId: data.school_id
+                
+                if (editingClass) {
+                  const updatePayload = {
+                    name: formData.get('name') as string,
+                    year: parseInt(formData.get('year') as string)
                   };
-                  setClasses(prev => [...prev, mapped]);
-                  setShowAddClass(false);
+                  const { data, error } = await supabase.from('classes').update(updatePayload).eq('id', editingClass.id).select().single();
+                  if (!error && data) {
+                    const mapped = {
+                      ...data,
+                      isEnrollmentOpen: data.is_enrollment_open,
+                      enrollmentRequirements: data.enrollment_requirements || [],
+                      schoolId: data.school_id
+                    };
+                    setClasses(prev => prev.map(c => c.id === editingClass.id ? mapped : c));
+                    if (selectedClass?.id === editingClass.id) setSelectedClass(mapped);
+                    setShowAddClass(false);
+                    setEditingClass(null);
+                  } else {
+                    alert('Erro ao editar: ' + (error?.message || 'Erro desconhecido'));
+                  }
+                } else {
+                  const newClass = {
+                    name: formData.get('name') as string,
+                    year: parseInt(formData.get('year') as string),
+                    students: [],
+                    sessions: [],
+                    is_enrollment_open: false,
+                    enrollment_requirements: [],
+                    school_id: selectedSchool?.id
+                  };
+
+                  const { data, error } = await supabase.from('classes').insert([newClass]).select().single();
+                  if (!error && data) {
+                    const mapped = {
+                      ...data,
+                      isEnrollmentOpen: data.is_enrollment_open,
+                      enrollmentRequirements: data.enrollment_requirements || [],
+                      schoolId: data.school_id
+                    };
+                    setClasses(prev => [...prev, mapped]);
+                    setShowAddClass(false);
+                  } else {
+                    alert('Erro ao criar: ' + (error?.message || 'Erro desconhecido'));
+                  }
                 }
               }}
               className="p-8 space-y-5"
             >
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nome da Turma</label>
-                <input name="name" required className="w-full px-4 py-2 border rounded-xl" placeholder="Ex: Turma Alfa" />
+                <input name="name" defaultValue={editingClass?.name || ''} required className="w-full px-4 py-2 border rounded-xl" placeholder="Ex: Turma Alfa" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Ano Letivo</label>
-                <input name="year" type="number" defaultValue={new Date().getFullYear()} required className="w-full px-4 py-2 border rounded-xl" />
+                <input name="year" type="number" defaultValue={editingClass?.year || new Date().getFullYear()} required className="w-full px-4 py-2 border rounded-xl" />
               </div>
               <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowAddClass(false)} className="flex-1 py-3 text-slate-600 font-bold">Cancelar</button>
-                <button type="submit" className="flex-1 py-3 bg-emcn-blue text-white font-bold rounded-xl shadow-lg">Criar Turma</button>
+                <button type="button" onClick={() => { setShowAddClass(false); setEditingClass(null); }} className="flex-1 py-3 text-slate-600 font-bold">Cancelar</button>
+                <button type="submit" className="flex-1 py-3 bg-emcn-blue text-white font-bold rounded-xl shadow-lg">{editingClass ? 'Salvar Alterações' : 'Criar Turma'}</button>
               </div>
             </form>
           </div>

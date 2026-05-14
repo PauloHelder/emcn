@@ -66,6 +66,7 @@ export interface Exam {
     options: string[];
     correctIndex: number;
   }>;
+  status?: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
 }
 
 export interface Country {
