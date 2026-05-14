@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Discipline, Exam, Grade, Student } from '../types';
-import { 
-  Plus, BookOpen, Clock, Trash2, Edit, X, Loader2, 
+import {
+  Plus, BookOpen, Clock, Trash2, Edit, X, Loader2,
   FileText, Calendar, Award, ChevronRight, AlertCircle, Save
 } from 'lucide-react';
 import { supabase } from '../supabase';
@@ -17,13 +17,13 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<Discipline>>({});
-  
+
   // Exam management state
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [showExamForm, setShowExamForm] = useState(false);
   const [examFormData, setExamFormData] = useState<Partial<Exam>>({});
-  
+
   // Grade management state
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -48,7 +48,7 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
         .from('exams')
         .select('*')
         .eq('discipline_id', disciplineId);
-      
+
       if (error) throw error;
       setExams(data.map((e: any) => ({
         ...e,
@@ -69,7 +69,7 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
         .from('grades')
         .select('*')
         .eq('exam_id', examId);
-      
+
       if (error) throw error;
       const mappedGrades = data.map((g: any) => ({
         ...g,
@@ -77,7 +77,7 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
         studentId: g.student_id
       }));
       setGrades(mappedGrades);
-      
+
       // Initialize editing state
       const gradeMap: Record<string, number> = {};
       mappedGrades.forEach((g: Grade) => {
@@ -171,7 +171,7 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
           .insert([payload]);
         if (error) throw error;
       }
-      
+
       fetchExams(selectedDiscipline.id);
       setShowExamForm(false);
       setExamFormData({});
@@ -208,10 +208,10 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
 
       // Delete existing grades for this exam and insert new ones (simpler than upserting individually)
       await supabase.from('grades').delete().eq('exam_id', selectedExam.id);
-      
+
       const { error } = await supabase.from('grades').insert(gradeEntries);
       if (error) throw error;
-      
+
       alert('Notas salvas com sucesso!');
       setSelectedExam(null);
     } catch (err: any) {
@@ -254,13 +254,13 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
             </div>
             <h3 className="text-xl font-bold text-slate-800 mb-2">{discipline.name}</h3>
             <p className="text-sm text-slate-500 line-clamp-2 mb-4 h-10">{discipline.description || 'Sem descrição.'}</p>
-            
+
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-400 bg-slate-50 p-2 rounded-lg mb-4">
               <Clock size={16} className="text-emcn-gold" />
               Carga Horária: {discipline.workload} horas
             </div>
 
-            <button 
+            <button
               onClick={() => setSelectedDiscipline(discipline)}
               className="w-full py-2.5 border-2 border-emcn-gold/20 text-emcn-gold font-bold rounded-xl hover:bg-emcn-gold hover:text-white transition-all flex items-center justify-center gap-2"
             >
@@ -281,11 +281,11 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
               </div>
               <button onClick={() => setSelectedDiscipline(null)} className="hover:bg-white/10 p-2 rounded-xl transition-colors"><X /></button>
             </div>
-            
+
             <div className="p-8 overflow-y-auto flex-1">
               <div className="flex justify-between items-center mb-6">
                 <h4 className="font-bold text-slate-800">Avaliações Cadastradas</h4>
-                <button 
+                <button
                   onClick={() => { setExamFormData({}); setShowExamForm(true); }}
                   className="px-4 py-2 bg-emcn-gold text-white rounded-lg font-bold flex items-center gap-2 text-sm shadow-lg shadow-emcn-gold/20"
                 >
@@ -309,21 +309,21 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <button 
+                      <button
                         onClick={() => setSelectedExam(exam)}
                         className="flex-1 sm:flex-none px-4 py-2 bg-emcn-blue text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-all"
                       >
                         Lançar Notas
                       </button>
-                      <button 
+                      <button
                         onClick={() => { setExamFormData(exam); setShowExamForm(true); }}
                         className="p-2 text-slate-400 hover:text-emcn-blue hover:bg-white rounded-lg transition-all"
                       >
                         <Edit size={16} />
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleDeleteExam(exam.id)}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-all"
                       >
@@ -355,9 +355,9 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
             <form onSubmit={handleSaveExam} className="p-8 space-y-5">
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Título da Avaliação</label>
-                <input 
-                  required 
-                  value={examFormData.title || ''} 
+                <input
+                  required
+                  value={examFormData.title || ''}
                   onChange={(e) => setExamFormData(prev => ({ ...prev, title: e.target.value }))}
                   className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl focus:border-emcn-gold outline-none"
                   placeholder="Ex: Prova Final de Módulo"
@@ -366,20 +366,20 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Data</label>
-                  <input 
-                    type="date" 
-                    required 
-                    value={examFormData.date || ''} 
+                  <input
+                    type="date"
+                    required
+                    value={examFormData.date || ''}
                     onChange={(e) => setExamFormData(prev => ({ ...prev, date: e.target.value }))}
                     className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl focus:border-emcn-gold outline-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Nota Máxima</label>
-                  <input 
-                    type="number" 
-                    required 
-                    value={examFormData.maxScore || 10} 
+                  <input
+                    type="number"
+                    required
+                    value={examFormData.maxScore || 10}
                     onChange={(e) => setExamFormData(prev => ({ ...prev, maxScore: Number(e.target.value) }))}
                     className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl focus:border-emcn-gold outline-none"
                   />
@@ -387,9 +387,9 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Instruções (Opcional)</label>
-                <textarea 
+                <textarea
                   rows={2}
-                  value={examFormData.description || ''} 
+                  value={examFormData.description || ''}
                   onChange={(e) => setExamFormData(prev => ({ ...prev, description: e.target.value }))}
                   className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl focus:border-emcn-gold outline-none"
                 />
@@ -415,7 +415,7 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
               </div>
               <button onClick={() => setSelectedExam(null)} className="hover:bg-white/10 p-2 rounded-xl transition-colors"><X /></button>
             </div>
-            
+
             <div className="p-8 overflow-y-auto flex-1">
               <div className="space-y-3">
                 {[...students].sort((a, b) => a.name.localeCompare(b.name)).map(student => (
@@ -427,9 +427,9 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
                       <div className="font-bold text-slate-800">{student.name}</div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <input 
-                        type="number" 
-                        min="0" 
+                      <input
+                        type="number"
+                        min="0"
                         max={selectedExam.maxScore}
                         step="0.1"
                         placeholder="0.0"
@@ -443,15 +443,15 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
                 ))}
               </div>
             </div>
-            
+
             <div className="p-8 border-t bg-slate-50 flex gap-4 shrink-0">
-              <button 
-                onClick={() => setSelectedExam(null)} 
+              <button
+                onClick={() => setSelectedExam(null)}
                 className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-100 rounded-2xl transition-all"
               >
                 Descartar
               </button>
-              <button 
+              <button
                 onClick={handleSaveGrades}
                 className="flex-1 py-4 bg-green-600 text-white font-bold rounded-2xl shadow-xl shadow-green-200 flex items-center justify-center gap-2"
               >
@@ -473,33 +473,33 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
             <form onSubmit={handleSaveDiscipline} className="p-8 space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nome da Disciplina</label>
-                <input 
-                  required 
-                  disabled={loading} 
+                <input
+                  required
+                  disabled={loading}
                   placeholder="Ex: Teologia Sistemática"
-                  value={formData.name || ''} 
+                  value={formData.name || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl focus:border-emcn-gold outline-none"
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Descrição</label>
-                <textarea 
-                  rows={3} 
-                  disabled={loading} 
+                <textarea
+                  rows={3}
+                  disabled={loading}
                   placeholder="Sobre o que trata esta disciplina?"
-                  value={formData.description || ''} 
+                  value={formData.description || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl focus:border-emcn-gold outline-none"
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Carga Horária (horas)</label>
-                <input 
-                  type="number" 
-                  required 
-                  disabled={loading} 
-                  value={formData.workload || ''} 
+                <input
+                  type="number"
+                  required
+                  disabled={loading}
+                  value={formData.workload || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, workload: Number(e.target.value) }))}
                   className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl focus:border-emcn-gold outline-none"
                 />

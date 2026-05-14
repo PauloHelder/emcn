@@ -18,16 +18,16 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
   const [error, setError] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [checkedRequirements, setCheckedRequirements] = useState<Record<string, boolean>>({});
-  const [formData, setFormData] = useState({ 
-    name: '', 
-    email: '', 
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
     phone: '',
     countryId: '',
     provinceId: '',
     communeId: '',
     address: ''
   });
-  
+
   // Location state
   const [countries, setCountries] = useState<Country[]>([]);
   const [provinces, setProvinces] = useState<Province[]>([]);

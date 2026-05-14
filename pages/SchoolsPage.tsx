@@ -14,7 +14,7 @@ const SchoolsPage: React.FC<SchoolsPageProps> = ({ schools, setSchools, classes,
     const [showForm, setShowForm] = useState(false);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState<Partial<School>>({});
-    
+
     // Location state
     const [countries, setCountries] = useState<Country[]>([]);
     const [provinces, setProvinces] = useState<Province[]>([]);
