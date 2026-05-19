@@ -100,7 +100,13 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
 
       if (discData) setDisciplines(discData);
       if (teachData) setTeachers(teachData);
-      if (examData) setExams(examData.map((e: any) => ({ ...e, disciplineId: e.discipline_id, maxScore: e.max_score })));
+      if (examData) setExams(examData.map((e: any) => ({ 
+        ...e, 
+        classId: e.class_id, 
+        disciplineId: e.discipline_id, 
+        dueDate: e.due_date,
+        maxScore: e.max_score 
+      })));
       
       let finalGrades = gradeData || [];
       if (finalGrades.length === 0 && studentId !== currentUser.id) {
