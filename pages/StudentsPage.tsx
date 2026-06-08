@@ -45,10 +45,10 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
         email: formData.email,
         phone: formData.phone,
         status: formData.status,
-        country_id: formData.countryId,
-        province_id: formData.provinceId,
-        commune_id: formData.communeId,
-        address_details: formData.addressDetails
+        country_id: formData.countryId || null,
+        province_id: formData.provinceId || null,
+        commune_id: formData.communeId || null,
+        address_details: formData.addressDetails || null
       };
 
       if (formData.id) {
