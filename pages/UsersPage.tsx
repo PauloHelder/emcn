@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { Plus, Search, Edit, Trash2, X, Shield, Mail, BadgeCheck, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Shield, Mail, BadgeCheck, Loader2, Key } from 'lucide-react';
 import { supabase } from '../supabase';
 
 const UsersPage: React.FC = () => {
@@ -13,6 +13,13 @@ const UsersPage: React.FC = () => {
 
     const [searchingEmail, setSearchingEmail] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Reset password states
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetUserId, setResetUserId] = useState<string | null>(null);
+    const [resetUserName, setResetUserName] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [resetting, setResetting] = useState(false);
 
     useEffect(() => {
         fetchUsers();
@@ -113,6 +120,28 @@ const UsersPage: React.FC = () => {
         }
     };
 
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword.length < 6) {
+            alert('A senha deve ter no mínimo 6 caracteres.');
+            return;
+        }
+        setResetting(true);
+        try {
+            const { error } = await supabase.rpc('reset_user_password', {
+                target_user_id: resetUserId,
+                new_password: newPassword
+            });
+            if (error) throw error;
+            alert('Senha redefinida com sucesso!');
+            setShowResetModal(false);
+        } catch (err: any) {
+            alert('Erro ao redefinir senha: ' + err.message);
+        } finally {
+            setResetting(false);
+        }
+    };
+
     const filteredUsers = users.filter(u =>
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -183,6 +212,18 @@ const UsersPage: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={() => {
+                                                setResetUserId(user.id);
+                                                setResetUserName(user.name);
+                                                setNewPassword('');
+                                                setShowResetModal(true);
+                                            }}
+                                            className="p-2 text-slate-400 hover:text-emcn-gold"
+                                            title="Redefinir Senha"
+                                        >
+                                            <Key size={16} />
+                                        </button>
                                         <button onClick={() => { setFormData(user); setShowForm(true); }} className="p-2 text-slate-400 hover:text-emcn-blue"><Edit size={16} /></button>
                                         <button className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
                                     </div>
@@ -262,6 +303,43 @@ const UsersPage: React.FC = () => {
                                 <button type="submit" disabled={saving} className="flex-1 py-3 bg-emcn-gold text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2">
                                     {saving && <Loader2 size={16} className="animate-spin" />}
                                     {formData.id ? 'Salvar Alterações' : 'Criar Conta'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showResetModal && (
+                <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
+                        <div className="bg-emcn-blue p-6 text-white flex justify-between items-center relative">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10" />
+                            <h3 className="text-xl font-bold relative z-10">Redefinir Senha</h3>
+                            <button onClick={() => setShowResetModal(false)} className="hover:bg-white/10 p-1 rounded-lg relative z-10"><X /></button>
+                        </div>
+                        <form onSubmit={handleResetPassword} className="p-8 space-y-5">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <p className="text-sm text-slate-600">
+                                    Alterando a senha de <strong>{resetUserName}</strong>
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Nova Senha</label>
+                                <input
+                                    required
+                                    type="password"
+                                    placeholder="Mínimo 6 caracteres"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    className="w-full px-4 py-2 border-2 border-slate-50 rounded-xl focus:border-emcn-gold outline-none"
+                                />
+                            </div>
+                            <div className="flex gap-4 pt-4">
+                                <button type="button" onClick={() => setShowResetModal(false)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-all">Cancelar</button>
+                                <button type="submit" disabled={resetting} className="flex-1 py-3 bg-emcn-gold text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2">
+                                    {resetting && <Loader2 size={16} className="animate-spin" />}
+                                    Redefinir Senha
                                 </button>
                             </div>
                         </form>

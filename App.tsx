@@ -19,7 +19,8 @@ import {
   FileText,
   Globe,
   MapPin,
-  Map
+  Map,
+  Video
 } from 'lucide-react';
 import {
   MOCK_TEACHERS,
@@ -46,7 +47,9 @@ import UnitsPage from './pages/UnitsPage';
 import UsersPage from './pages/UsersPage';
 import ConfigPage from './pages/ConfigPage';
 import StudentArea from './pages/StudentArea';
+import StudentEadPage from './pages/StudentEadPage';
 import ExamsPage from './pages/ExamsPage';
+import EadAdminPage from './pages/EadAdminPage';
 import { supabase } from './supabase';
 
 interface LayoutProps {
@@ -66,10 +69,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, students, handle
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/inscricoes-gestao', label: 'Inscrições Pendentes', icon: UserPlus, badge: pendingEnrollmentsCount, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/area-aluno', label: 'Minha Área', icon: Award, roles: ['STUDENT'] },
+    { path: '/ead', label: 'Aulas EAD', icon: Video, roles: ['STUDENT', 'ADMIN'] },
     { path: '/professores', label: 'Corpo Docente', icon: GraduationCap, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/alunos', label: 'Gestão de Alunos', icon: Users, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/disciplinas', label: 'Matriz Curricular', icon: BookOpen, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/escolas', label: 'Escolas', icon: SchoolIcon, roles: ['ADMIN', 'SECRETARY'] },
+    { path: '/ead-admin', label: 'EAD / Aulas', icon: Video, roles: ['ADMIN', 'TEACHER'] },
     { path: '/provas', label: 'Provas', icon: FileText, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/usuarios', label: 'Usuários e Perfis', icon: ClipboardList, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['ADMIN'] },
@@ -95,7 +100,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, students, handle
         <div className="p-6 flex flex-col h-full">
           <div className="flex items-center gap-3 mb-10">
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1 overflow-hidden shadow-lg shadow-white/10">
-              <img src="https://emcn.com.br/wp-content/uploads/2021/04/cropped-LOGOTIPO-EMCN-1-192x192.png" alt="Logo" className="w-full h-full object-contain" />
+              <img 
+                src="https://emcn.com.br/wp-content/uploads/2021/04/cropped-LOGOTIPO-EMCN-1-192x192.png" 
+                alt="Logo" 
+                className="w-full h-full object-contain" 
+                onError={(e) => { e.currentTarget.src = "https://via.placeholder.com/150?text=EMCN"; }}
+              />
             </div>
             <h1 className="font-serif text-xl text-emcn-gold tracking-wider font-bold">EMCN</h1>
           </div>
@@ -343,6 +353,7 @@ const App: React.FC = () => {
         <Route path="/login" element={!currentUser ? <LoginPage /> : <Navigate to="/dashboard" />} />
         <Route path="/inscricao" element={<EnrollmentPage settings={enrollmentSettings} students={students} setStudents={setStudents} classes={classes} schools={schools} />} />
         <Route path="/area-aluno" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><StudentArea currentUser={currentUser} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/ead" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><StudentEadPage currentUser={currentUser} /></Layout> : <Navigate to="/login" />} />
         <Route path="/usuarios" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><UsersPage /></Layout> : <Navigate to="/dashboard" />} />
 
         {/* Private Routes */}
@@ -368,6 +379,7 @@ const App: React.FC = () => {
           )}
         </Layout> : <Navigate to="/login" />} />
         <Route path="/provas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamsPage classes={classes} disciplines={disciplines} schools={schools} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/ead-admin" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><EadAdminPage classes={classes} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
         <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>
     </HashRouter>

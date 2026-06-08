@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClassGroup, Student, Teacher, Discipline, ClassSession, School } from '../types';
 import {
-  Plus, Users, Calendar, ClipboardCheck, LayoutGrid, ChevronRight, X, User,
+  Plus, Users, Calendar, ClipboardCheck, LayoutGrid, ChevronRight, ChevronDown, X, User,
   Layers, Edit, Trash2, CheckSquare, Settings, Loader2, Check, UserCheck, UserX, AlertCircle, FileText, HelpCircle, ListChecks
 } from 'lucide-react';
 import { supabase } from '../supabase';
@@ -28,6 +28,7 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
+  const [expandedDisciplines, setExpandedDisciplines] = useState<Record<string, boolean>>({});
 
   // Session Form State
   const [showSessionForm, setShowSessionForm] = useState(false);
@@ -343,66 +344,143 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                 </button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 border-b text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                    <tr>
-                      <th className="px-8 py-5">Data</th>
-                      <th className="px-8 py-5">Disciplina</th>
-                      <th className="px-8 py-5">Professor Responsável</th>
-                      <th className="px-8 py-5 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {[...selectedClass.sessions].sort((a, b) => a.date.localeCompare(b.date)).map(session => (
-                      <tr key={session.id} className="hover:bg-slate-50/50 group transition-colors">
-                        <td className="px-8 py-5">
-                          <div className="flex items-center gap-3">
-                            <Calendar size={16} className="text-emcn-gold" />
-                            <span className="font-bold text-emcn-blue">{new Date(session.date).toLocaleDateString()}</span>
-                          </div>
-                        </td>
-                        <td className="px-8 py-5">
-                          <div>
-                            <div className="font-bold text-slate-800">{getDisciplineName(session.disciplineId)}</div>
-                            <div className="text-[10px] text-slate-400 font-medium">Módulo Obrigatório</div>
-                          </div>
-                        </td>
-                        <td className="px-8 py-5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 border border-white shadow-sm">
-                              {getTeacherName(session.teacherId).charAt(0)}
-                            </div>
-                            <span className="text-sm font-semibold text-slate-600">{getTeacherName(session.teacherId)}</span>
-                          </div>
-                        </td>
-                        <td className="px-8 py-5 text-right">
-                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                            <button
-                              onClick={() => { setSessionFormData(session); setShowSessionForm(true); }}
-                              className="p-2 text-slate-400 hover:text-emcn-blue hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-slate-100 transition-all"
-                            >
-                              <Edit size={18} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteSession(session.id)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-slate-100 transition-all"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {selectedClass.sessions.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-8 py-20 text-center">
-                          <Calendar size={48} className="mx-auto mb-4 text-slate-200" />
-                          <p className="text-slate-400 font-medium">Nenhuma aula cadastrada. Comece planejando o cronograma!</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                {(() => {
+                  // Group sessions by discipline
+                  const groups: Record<string, { disciplineId: string; earliestDate: string; sessions: ClassSession[] }> = {};
+                  selectedClass.sessions.forEach(session => {
+                    if (!groups[session.disciplineId]) {
+                      groups[session.disciplineId] = {
+                        disciplineId: session.disciplineId,
+                        earliestDate: session.date,
+                        sessions: []
+                      };
+                    }
+                    groups[session.disciplineId].sessions.push(session);
+                    if (session.date < groups[session.disciplineId].earliestDate) {
+                      groups[session.disciplineId].earliestDate = session.date;
+                    }
+                  });
+
+                  // Sort the sessions inside each group chronologically
+                  Object.values(groups).forEach(g => {
+                    g.sessions.sort((a, b) => a.date.localeCompare(b.date));
+                  });
+
+                  // Sort the groups themselves chronologically by earliest date
+                  const sortedGroups = Object.values(groups).sort((a, b) => a.earliestDate.localeCompare(b.earliestDate));
+
+                  return (
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                        <tr>
+                          <th className="px-8 py-5">Matéria / Disciplina</th>
+                          <th className="px-8 py-5">Aulas Programadas</th>
+                          <th className="px-8 py-5">Primeira Aula</th>
+                          <th className="px-8 py-5 text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {sortedGroups.map(group => {
+                          const isExpanded = !!expandedDisciplines[group.disciplineId];
+                          return (
+                            <React.Fragment key={group.disciplineId}>
+                              <tr 
+                                onClick={() => setExpandedDisciplines(prev => ({ ...prev, [group.disciplineId]: !isExpanded }))}
+                                className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                              >
+                                <td className="px-8 py-5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="text-slate-400">
+                                      {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                    </div>
+                                    <div>
+                                      <div className="font-bold text-slate-800">{getDisciplineName(group.disciplineId)}</div>
+                                      <div className="text-[10px] text-slate-400 font-medium">Módulo de Ensino</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-8 py-5">
+                                  <span className="px-3 py-1 bg-emcn-blue/5 text-emcn-blue rounded-full text-xs font-bold">
+                                    {group.sessions.length} {group.sessions.length === 1 ? 'aula' : 'aulas'}
+                                  </span>
+                                </td>
+                                <td className="px-8 py-5 text-sm text-slate-500 font-medium">
+                                  {new Date(group.earliestDate).toLocaleDateString()}
+                                </td>
+                                <td className="px-8 py-5 text-right" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => {
+                                      setSessionFormData({
+                                        disciplineId: group.disciplineId,
+                                        date: new Date().toISOString().split('T')[0]
+                                      });
+                                      setShowSessionForm(true);
+                                    }}
+                                    className="px-4 py-1.5 bg-slate-100 text-emcn-blue rounded-lg text-xs font-bold hover:bg-emcn-blue hover:text-white transition-all"
+                                  >
+                                    + Nova Aula
+                                  </button>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={4} className="bg-slate-50/30 p-0">
+                                    <div className="px-14 py-4 space-y-3 border-l-4 border-emcn-gold bg-slate-50/10">
+                                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Aulas e Professores</div>
+                                      <div className="divide-y divide-slate-100 border rounded-2xl overflow-hidden bg-white">
+                                        {group.sessions.map((session, idx) => (
+                                          <div key={session.id} className="flex justify-between items-center p-4 hover:bg-slate-50/30 transition-colors">
+                                            <div className="flex items-center gap-8">
+                                              <div className="text-xs font-bold text-slate-400 w-8">#{idx + 1}</div>
+                                              <div className="flex items-center gap-2">
+                                                <Calendar size={14} className="text-emcn-gold" />
+                                                <span className="text-sm font-bold text-emcn-blue">{new Date(session.date).toLocaleDateString()}</span>
+                                              </div>
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 border border-white shadow-sm">
+                                                  {getTeacherName(session.teacherId).charAt(0)}
+                                                </div>
+                                                <span className="text-xs font-semibold text-slate-600">{getTeacherName(session.teacherId)}</span>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <button
+                                                onClick={() => { setSessionFormData(session); setShowSessionForm(true); }}
+                                                className="p-1.5 text-slate-400 hover:text-emcn-blue hover:bg-slate-100 rounded-lg transition-all"
+                                                title="Editar Aula"
+                                              >
+                                                <Edit size={16} />
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteSession(session.id)}
+                                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                title="Excluir Aula"
+                                              >
+                                                <Trash2 size={16} />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                        {selectedClass.sessions.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-8 py-20 text-center">
+                              <Calendar size={48} className="mx-auto mb-4 text-slate-200" />
+                              <p className="text-slate-400 font-medium">Nenhuma aula cadastrada. Comece planejando o cronograma!</p>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
             </div>
           )}

@@ -45,3 +45,31 @@ ON CONFLICT (role, module) DO NOTHING;
 -- 4. Habilitar Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
 ALTER PUBLICATION supabase_realtime ADD TABLE permissions;
+
+-- 5. Função para Administradores Redefinirem Senhas de Usuários
+-- Execute este bloco no SQL Editor do Supabase
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION public.reset_user_password(target_user_id UUID, new_password TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    caller_role TEXT;
+BEGIN
+    -- Obter a role do usuário que está chamando a função (auth.uid())
+    SELECT role INTO caller_role FROM public.profiles WHERE id = auth.uid();
+
+    -- Garantir que apenas administradores possam redefinir senhas
+    IF caller_role != 'ADMIN' OR caller_role IS NULL THEN
+        RAISE EXCEPTION 'Acesso negado: Apenas administradores podem redefinir senhas.';
+    END IF;
+
+    -- Atualizar a senha criptografada na tabela auth.users usando bcrypt
+    UPDATE auth.users
+    SET encrypted_password = crypt(new_password, gen_salt('bf')),
+        updated_at = NOW()
+    WHERE id = target_user_id;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+

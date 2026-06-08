@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Loader2,
   ChevronRight,
+  ChevronDown,
   ArrowRight,
   FileText,
   Target,
@@ -42,6 +43,7 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submittingExam, setSubmittingExam] = useState(false);
+  const [expandedDisciplines, setExpandedDisciplines] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchData();
@@ -358,70 +360,167 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                   <Calendar className="text-emcn-gold" /> {selectedClass?.name} - Cronograma
                 </h3>
-                <span className="text-xs text-slate-400 font-medium">Sessões da turma</span>
+                <span className="text-xs text-slate-400 font-medium">Matérias da turma</span>
               </div>
 
-              <div className="space-y-4">
-                {sortedSessions.map((session) => {
-                  const isToday = session.date === today;
-                  const isPresent = studentProfileId && session.attendance[studentProfileId] === true;
-                  
-                  return (
-                    <div 
-                      key={session.id}
-                      className={`group bg-white p-6 rounded-[32px] border-2 transition-all duration-300 ${
-                        isToday && !isPresent 
-                          ? 'border-emcn-gold ring-4 ring-emcn-gold/5 shadow-xl scale-[1.02]' 
-                          : 'border-slate-50 hover:border-slate-100 hover:shadow-md'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-                        <div className="flex items-center gap-5">
-                          <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-bold transition-colors ${
-                            isPresent ? 'bg-green-50 text-green-600' : isToday ? 'bg-emcn-gold text-white' : 'bg-slate-50 text-slate-400'
-                          }`}>
-                            <span className="text-[10px] leading-none mb-1 uppercase">{new Date(session.date).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</span>
-                            <span className="text-xl leading-none">{new Date(session.date).getDate()}</span>
+              <div className="space-y-3">
+                {(() => {
+                  // Group sessions by discipline
+                  const groups: Record<string, { disciplineId: string; earliestDate: string; sessions: ClassSession[] }> = {};
+                  sortedSessions.forEach(session => {
+                    if (!groups[session.disciplineId]) {
+                      groups[session.disciplineId] = {
+                        disciplineId: session.disciplineId,
+                        earliestDate: session.date,
+                        sessions: []
+                      };
+                    }
+                    groups[session.disciplineId].sessions.push(session);
+                    if (session.date < groups[session.disciplineId].earliestDate) {
+                      groups[session.disciplineId].earliestDate = session.date;
+                    }
+                  });
+
+                  // Sort sessions inside each group chronologically
+                  Object.values(groups).forEach(g => {
+                    g.sessions.sort((a, b) => a.date.localeCompare(b.date));
+                  });
+
+                  // Sort groups chronologically by earliest date
+                  const sortedGroups = Object.values(groups).sort((a, b) => a.earliestDate.localeCompare(b.earliestDate));
+
+                  if (sortedGroups.length === 0) {
+                    return (
+                      <div className="bg-white p-12 rounded-[32px] border-2 border-dashed border-slate-100 text-center">
+                        <BookOpen size={40} className="mx-auto text-slate-200 mb-4" />
+                        <p className="text-slate-400 font-medium">Nenhuma aula programada ainda.</p>
+                      </div>
+                    );
+                  }
+
+                  return sortedGroups.map(group => {
+                    const isExpanded = !!expandedDisciplines[group.disciplineId];
+                    const presentInGroup = group.sessions.filter(s => studentProfileId && s.attendance[studentProfileId] === true).length;
+                    const todaySession = group.sessions.find(s => s.date === today);
+
+                    return (
+                      <div key={group.disciplineId} className="bg-white rounded-[28px] border-2 border-slate-50 overflow-hidden transition-all duration-300 hover:border-slate-100 hover:shadow-md">
+                        {/* Discipline header row */}
+                        <div
+                          className="flex items-center justify-between p-5 cursor-pointer"
+                          onClick={() => setExpandedDisciplines(prev => ({ ...prev, [group.disciplineId]: !isExpanded }))}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${isExpanded ? 'bg-emcn-gold text-white' : 'bg-slate-50 text-slate-400'}`}>
+                              <BookOpen size={20} />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-800">{getDisciplineName(group.disciplineId)}</h4>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                <span className="text-xs text-slate-400 font-medium">
+                                  {group.sessions.length} {group.sessions.length === 1 ? 'aula' : 'aulas'}
+                                </span>
+                                <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                                <span className="text-xs text-green-600 font-semibold">
+                                  {presentInGroup} presença{presentInGroup !== 1 ? 's' : ''}
+                                </span>
+                                {todaySession && (
+                                  <>
+                                    <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                                    <span className="text-xs text-emcn-gold font-bold animate-pulse">● Aula hoje</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          
-                          <div>
-                            <h4 className="font-bold text-slate-800 group-hover:text-emcn-blue transition-colors">{getDisciplineName(session.disciplineId)}</h4>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                              <span className="flex items-center gap-1"><UserIcon size={12} className="text-emcn-gold" /> {getTeacherName(session.teacherId)}</span>
-                              <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                              <span className="flex items-center gap-1"><Clock size={12} className="text-emcn-gold" /> 19:30 - 21:30</span>
+                          <div className="flex items-center gap-3">
+                            {/* Mini progress bar */}
+                            <div className="hidden sm:flex flex-col items-end gap-1">
+                              <span className="text-[10px] text-slate-400 font-medium">{group.sessions.length > 0 ? Math.round((presentInGroup / group.sessions.length) * 100) : 0}% presença</span>
+                              <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-green-400 rounded-full transition-all"
+                                  style={{ width: `${group.sessions.length > 0 ? (presentInGroup / group.sessions.length) * 100 : 0}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="text-slate-400">
+                              {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                             </div>
                           </div>
                         </div>
 
-                        <div className="w-full sm:w-auto">
-                          {isPresent ? (
-                            <div className="flex items-center gap-2 bg-green-50 text-green-700 px-5 py-2.5 rounded-2xl font-bold text-sm">
-                              <CheckCircle2 size={18} /> Presença Confirmada
-                            </div>
-                          ) : isToday ? (
-                            <button
-                              onClick={() => handleCheckIn(session.id)}
-                              disabled={checkingIn === session.id}
-                              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-emcn-gold text-white px-8 py-3 rounded-2xl font-bold text-sm hover:bg-[#b08e4d] transition-all shadow-lg shadow-emcn-gold/20"
-                            >
-                              {checkingIn === session.id ? (
-                                <Loader2 size={18} className="animate-spin" />
-                              ) : (
-                                <Award size={18} />
-                              )}
-                              Registrar Minha Presença
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-2 bg-slate-50 text-slate-400 px-5 py-2.5 rounded-2xl font-bold text-sm">
-                              <XCircle size={18} /> Falta ou Não Iniciada
-                            </div>
-                          )}
-                        </div>
+                        {/* Expanded sessions list */}
+                        {isExpanded && (
+                          <div className="border-t border-slate-50 px-5 pb-4 pt-3 space-y-2 bg-slate-50/30">
+                            {group.sessions.map((session, idx) => {
+                              const isToday = session.date === today;
+                              const isPresent = studentProfileId && session.attendance[studentProfileId] === true;
+
+                              return (
+                                <div
+                                  key={session.id}
+                                  className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-200 bg-white ${
+                                    isToday && !isPresent
+                                      ? 'border-emcn-gold ring-4 ring-emcn-gold/5 shadow-lg'
+                                      : 'border-slate-50 hover:border-slate-100'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-4">
+                                    <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold text-center transition-colors ${
+                                      isPresent ? 'bg-green-50 text-green-600' : isToday ? 'bg-emcn-gold text-white' : 'bg-slate-50 text-slate-400'
+                                    }`}>
+                                      <span className="text-[9px] leading-none uppercase">{new Date(session.date).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</span>
+                                      <span className="text-base leading-none font-bold">{new Date(session.date).getDate()}</span>
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-slate-400 font-bold">Aula #{idx + 1}</span>
+                                        {isToday && <span className="text-[10px] font-bold text-emcn-gold bg-emcn-gold/10 px-2 py-0.5 rounded-full">HOJE</span>}
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+                                        <UserIcon size={11} className="text-emcn-gold" />
+                                        <span>{getTeacherName(session.teacherId)}</span>
+                                        <span className="text-slate-200">|</span>
+                                        <Clock size={11} className="text-emcn-gold" />
+                                        <span>19:30 - 21:30</span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="w-full sm:w-auto">
+                                    {isPresent ? (
+                                      <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-xl font-bold text-xs">
+                                        <CheckCircle2 size={15} /> Presente
+                                      </div>
+                                    ) : isToday ? (
+                                      <button
+                                        onClick={() => handleCheckIn(session.id)}
+                                        disabled={checkingIn === session.id}
+                                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-emcn-gold text-white px-6 py-2 rounded-xl font-bold text-xs hover:bg-[#b08e4d] transition-all shadow-md shadow-emcn-gold/20"
+                                      >
+                                        {checkingIn === session.id ? (
+                                          <Loader2 size={14} className="animate-spin" />
+                                        ) : (
+                                          <Award size={14} />
+                                        )}
+                                        Registrar Presença
+                                      </button>
+                                    ) : (
+                                      <div className="flex items-center gap-2 bg-slate-50 text-slate-400 px-4 py-2 rounded-xl font-bold text-xs">
+                                        <XCircle size={15} /> {new Date(session.date) > new Date() ? 'Futura' : 'Falta'}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </>
           ) : activeTab === 'PROVAS' ? (
