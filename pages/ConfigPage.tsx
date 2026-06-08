@@ -66,7 +66,9 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
         e.preventDefault();
         if (!newCountryName.trim()) return;
         const { data, error } = await supabase.from('countries').insert({ name: newCountryName }).select().single();
-        if (!error && data) {
+        if (error) {
+            alert('Erro ao adicionar país: ' + error.message);
+        } else if (data) {
             setCountries(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
             setNewCountryName('');
         }
@@ -76,7 +78,9 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
         e.preventDefault();
         if (!newProvinceName.trim() || !selectedCountryId) return;
         const { data, error } = await supabase.from('provinces').insert({ name: newProvinceName, country_id: selectedCountryId }).select().single();
-        if (!error && data) {
+        if (error) {
+            alert('Erro ao adicionar província: ' + error.message);
+        } else if (data) {
             setProvinces(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
             setNewProvinceName('');
         }
@@ -86,7 +90,9 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
         e.preventDefault();
         if (!newMunicipalityName.trim() || !selectedProvinceId) return;
         const { data, error } = await supabase.from('municipalities').insert({ name: newMunicipalityName, province_id: selectedProvinceId }).select().single();
-        if (!error && data) {
+        if (error) {
+            alert('Erro ao adicionar município: ' + error.message);
+        } else if (data) {
             const mapped = { id: data.id, provinceId: data.province_id, name: data.name };
             setMunicipalities(prev => [...prev, mapped].sort((a, b) => a.name.localeCompare(b.name)));
             setNewMunicipalityName('');
@@ -97,7 +103,9 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
         e.preventDefault();
         if (!newCommuneName.trim() || !selectedMunicipalityId) return;
         const { data, error } = await supabase.from('communes').insert({ name: newCommuneName, municipality_id: selectedMunicipalityId }).select().single();
-        if (!error && data) {
+        if (error) {
+            alert('Erro ao adicionar comuna: ' + error.message);
+        } else if (data) {
             setCommunes(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
             setNewCommuneName('');
         }

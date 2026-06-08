@@ -188,7 +188,7 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center">
         <div className="max-w-md w-full bg-white p-12 rounded-3xl shadow-xl border">
           <AlertCircle className="mx-auto text-red-500 mb-6" size={64} />
-          <h1 className="text-3xl font-serif text-emcn-blue mb-4">Inscrições Encerradas</h1>
+          <h2 className="text-3xl font-serif text-emcn-blue mb-4">Inscrições Encerradas</h2>
           <p className="text-slate-600 mb-8">Não há turmas abertas. Fique atento às nossas redes!</p>
           <Link to="/" className="text-emcn-blue font-bold flex items-center justify-center gap-2 hover:underline">
             <ArrowLeft size={18} /> Voltar ao Início
