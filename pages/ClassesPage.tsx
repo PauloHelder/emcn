@@ -29,6 +29,37 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [expandedDisciplines, setExpandedDisciplines] = useState<Record<string, boolean>>({});
+  
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+
+  const handleAddStudentToClass = async (studentId: string) => {
+    if (!selectedClass) return;
+    setLoading(true);
+    try {
+      const updatedStudentsList = [...selectedClass.students, studentId];
+      const { error } = await supabase
+        .from('classes')
+        .update({ students: updatedStudentsList })
+        .eq('id', selectedClass.id);
+        
+      if (error) throw error;
+      
+      const updatedClass = { ...selectedClass, students: updatedStudentsList };
+      setSelectedClass(updatedClass);
+      setClasses(prev => prev.map(c => c.id === selectedClass.id ? updatedClass : c));
+      
+      const studentObj = students.find(s => s.id === studentId);
+      if (studentObj && studentObj.status === 'INACTIVE') {
+        await supabase.from('students').update({ status: 'ACTIVE' }).eq('id', studentId);
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: 'ACTIVE' } : s));
+      }
+    } catch (err: any) {
+      alert('Erro ao adicionar aluno: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Session Form State
   const [showSessionForm, setShowSessionForm] = useState(false);
@@ -232,7 +263,15 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
           {view === 'DETAILS' && (
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-white rounded-2xl border p-8 space-y-6">
-                <h3 className="text-lg font-bold flex items-center gap-2"><Users className="text-emcn-gold" /> Lista de Alunos</h3>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-bold flex items-center gap-2"><Users className="text-emcn-gold" /> Lista de Alunos</h3>
+                  <button
+                    onClick={() => setShowAddStudentModal(true)}
+                    className="px-4 py-2 bg-emcn-blue text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center gap-1 shadow-md"
+                  >
+                    <Plus size={14} /> Adicionar Aluno
+                  </button>
+                </div>
                 <div className="divide-y border rounded-xl overflow-hidden">
                   {selectedClass.students
                     .map(sid => students.find(s => s.id === sid))
@@ -249,16 +288,15 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                     };
 
                     const handleReject = async () => {
-                      if (!window.confirm(`Recusar e remover ${student.name} desta turma?`)) return;
+                      if (!window.confirm(`Remover ${student.name} desta turma?`)) return;
                       const { error } = await supabase.from('classes')
                         .update({ students: selectedClass.students.filter(id => id !== student.id) })
                         .eq('id', selectedClass.id);
 
                       if (!error) {
-                        setClasses(prev => prev.map(c => c.id === selectedClass.id
-                          ? { ...c, students: c.students.filter(id => id !== student.id) }
-                          : c
-                        ));
+                        const updatedClass = { ...selectedClass, students: selectedClass.students.filter(id => id !== student.id) };
+                        setSelectedClass(updatedClass);
+                        setClasses(prev => prev.map(c => c.id === selectedClass.id ? updatedClass : c));
                       }
                     };
 
@@ -297,9 +335,18 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                               </button>
                             </div>
                           ) : (
-                            <span className="text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                              Ativo
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                                Ativo
+                              </span>
+                              <button
+                                onClick={handleReject}
+                                title="Remover da Turma"
+                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1064,6 +1111,84 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                 <button type="submit" className="flex-1 py-3 bg-emcn-blue text-white font-bold rounded-xl shadow-lg">{editingClass ? 'Salvar Alterações' : 'Criar Turma'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Add Student to Class */}
+      {showAddStudentModal && selectedClass && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-emcn-blue p-6 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-bold">Adicionar Aluno à Turma</h3>
+                <p className="text-white/60 text-xs mt-1">Busque alunos cadastrados na plataforma.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAddStudentModal(false);
+                  setStudentSearchQuery('');
+                }}
+                className="hover:bg-white/10 p-2 rounded-xl transition-colors text-white"
+              >
+                <X />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <input
+                type="text"
+                placeholder="Buscar por nome ou e-mail..."
+                value={studentSearchQuery}
+                onChange={(e) => setStudentSearchQuery(e.target.value)}
+                className="w-full px-4 py-2.5 border rounded-xl outline-none text-sm transition-all focus:border-emcn-gold"
+              />
+              
+              <div className="max-h-[250px] overflow-y-auto divide-y border rounded-xl">
+                {(() => {
+                  const availableStudents = students.filter(s => !selectedClass.students.includes(s.id));
+                  const filtered = availableStudents.filter(s =>
+                    s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                    s.email.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                  );
+                  
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="p-6 text-center text-slate-400 text-xs">
+                        Nenhum aluno disponível encontrado.
+                      </div>
+                    );
+                  }
+                  
+                  return filtered.map(student => (
+                    <div key={student.id} className="flex justify-between items-center p-3 hover:bg-slate-50 transition-colors">
+                      <div className="pr-2 truncate">
+                        <div className="font-bold text-slate-800 text-xs truncate">{student.name}</div>
+                        <div className="text-[10px] text-slate-400 truncate">{student.email}</div>
+                      </div>
+                      <button
+                        onClick={() => handleAddStudentToClass(student.id)}
+                        className="px-3 py-1.5 bg-emcn-gold text-emcn-blue rounded-lg text-xs font-bold hover:bg-[#b08e4d] hover:text-white transition-all flex items-center gap-1 shrink-0"
+                      >
+                        <Plus size={12} /> Add
+                      </button>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+            
+            <div className="p-4 bg-slate-50 border-t flex justify-end">
+              <button
+                onClick={() => {
+                  setShowAddStudentModal(false);
+                  setStudentSearchQuery('');
+                }}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold text-xs hover:bg-slate-300 transition-all"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
