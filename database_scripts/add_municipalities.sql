@@ -26,7 +26,11 @@ CREATE INDEX IF NOT EXISTS idx_students_municipality_id ON public.students(munic
 -- 5. Enable Realtime support for municipalities
 ALTER PUBLICATION supabase_realtime ADD TABLE public.municipalities;
 
--- 6. Seed Luanda's municipalities dynamically
+-- 6. Disable Row Level Security (RLS) on municipalities to allow insertion/reads
+-- (If you want to keep RLS active, create appropriate SELECT/INSERT/UPDATE/DELETE policies instead)
+ALTER TABLE public.municipalities DISABLE ROW LEVEL SECURITY;
+
+-- 7. Seed Luanda's municipalities dynamically
 DO $$
 DECLARE
     luanda_id UUID;
