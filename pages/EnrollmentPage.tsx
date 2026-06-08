@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { EnrollmentSettings, Student, ClassGroup, School, Country, Province, Commune } from '../types';
+import { EnrollmentSettings, Student, ClassGroup, School, Country, Province, Municipality, Commune } from '../types';
 import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Calendar, GraduationCap, ArrowLeft, Globe, MapPin, Map } from 'lucide-react';
 import { supabase } from '../supabase';
@@ -24,6 +24,7 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
     phone: '',
     countryId: '',
     provinceId: '',
+    municipalityId: '',
     communeId: '',
     address: ''
   });
@@ -31,6 +32,7 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
   // Location state
   const [countries, setCountries] = useState<Country[]>([]);
   const [provinces, setProvinces] = useState<Province[]>([]);
+  const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [communes, setCommunes] = useState<Commune[]>([]);
 
   const location = useLocation();
@@ -62,8 +64,15 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
     if (data) setProvinces(data);
   };
 
-  const fetchCommunes = async (provinceId: string) => {
-    const { data } = await supabase.from('communes').select('*').eq('province_id', provinceId).order('name');
+  const fetchMunicipalities = async (provinceId: string) => {
+    const { data } = await supabase.from('municipalities').select('*').eq('province_id', provinceId).order('name');
+    if (data) {
+      setMunicipalities(data.map(m => ({ id: m.id, provinceId: m.province_id, name: m.name })));
+    }
+  };
+
+  const fetchCommunes = async (municipalityId: string) => {
+    const { data } = await supabase.from('communes').select('*').eq('municipality_id', municipalityId).order('name');
     if (data) setCommunes(data);
   };
 
@@ -126,6 +135,7 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
           phone: formData.phone,
           country_id: formData.countryId || null,
           province_id: formData.provinceId || null,
+          municipality_id: formData.municipalityId || null,
           commune_id: formData.communeId || null,
           address_details: formData.address || null,
           role: 'STUDENT' as const,
@@ -336,8 +346,11 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
                         value={formData.countryId}
                         onChange={(e) => {
                           const id = e.target.value;
-                          setFormData(p => ({ ...p, countryId: id, provinceId: '', communeId: '' }));
+                          setFormData(p => ({ ...p, countryId: id, provinceId: '', municipalityId: '', communeId: '' }));
                           fetchProvinces(id);
+                          setProvinces([]);
+                          setMunicipalities([]);
+                          setCommunes([]);
                         }}
                         className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:border-emcn-gold rounded-2xl outline-none appearance-none"
                       >
@@ -353,8 +366,10 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
                         value={formData.provinceId}
                         onChange={(e) => {
                           const id = e.target.value;
-                          setFormData(p => ({ ...p, provinceId: id, communeId: '' }));
-                          fetchCommunes(id);
+                          setFormData(p => ({ ...p, provinceId: id, municipalityId: '', communeId: '' }));
+                          fetchMunicipalities(id);
+                          setMunicipalities([]);
+                          setCommunes([]);
                         }}
                         className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:border-emcn-gold rounded-2xl outline-none appearance-none disabled:opacity-50"
                       >
@@ -362,11 +377,29 @@ const EnrollmentPage: React.FC<EnrollmentPageProps> = ({ settings, setStudents, 
                         {provinces.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-bold text-slate-700 mb-2">Comuna</label>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">Município</label>
                       <select
                         required
                         disabled={loading || !formData.provinceId}
+                        value={formData.municipalityId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setFormData(p => ({ ...p, municipalityId: id, communeId: '' }));
+                          fetchCommunes(id);
+                          setCommunes([]);
+                        }}
+                        className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:border-emcn-gold rounded-2xl outline-none appearance-none disabled:opacity-50"
+                      >
+                        <option value="">Selecione o Município</option>
+                        {municipalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">Comuna</label>
+                      <select
+                        required
+                        disabled={loading || !formData.municipalityId}
                         value={formData.communeId}
                         onChange={(e) => setFormData(p => ({ ...p, communeId: e.target.value }))}
                         className="w-full px-5 py-3 bg-slate-50 border-2 border-transparent focus:border-emcn-gold rounded-2xl outline-none appearance-none disabled:opacity-50"

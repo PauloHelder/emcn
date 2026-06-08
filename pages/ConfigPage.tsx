@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { EnrollmentSettings, UserRole, Permission, Country, Province, Commune } from '../types';
+import { EnrollmentSettings, UserRole, Permission, Country, Province, Municipality, Commune } from '../types';
 import { Settings, Shield, BadgeCheck, Loader2, CheckCircle2, Save, Users, Lock, Globe, MapPin, Plus, Trash2, ChevronRight, Map } from 'lucide-react';
 import { supabase } from '../supabase';
 
@@ -20,13 +20,16 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
     // State for location management
     const [countries, setCountries] = useState<Country[]>([]);
     const [provinces, setProvinces] = useState<Province[]>([]);
+    const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
     const [communes, setCommunes] = useState<Commune[]>([]);
 
     const [selectedCountryId, setSelectedCountryId] = useState<string>('');
     const [selectedProvinceId, setSelectedProvinceId] = useState<string>('');
+    const [selectedMunicipalityId, setSelectedMunicipalityId] = useState<string>('');
 
     const [newCountryName, setNewCountryName] = useState('');
     const [newProvinceName, setNewProvinceName] = useState('');
+    const [newMunicipalityName, setNewMunicipalityName] = useState('');
     const [newCommuneName, setNewCommuneName] = useState('');
 
     useEffect(() => {
@@ -47,8 +50,15 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
         if (!error && data) setProvinces(data);
     };
 
-    const fetchCommunes = async (provinceId: string) => {
-        const { data, error } = await supabase.from('communes').select('*').eq('province_id', provinceId).order('name');
+    const fetchMunicipalities = async (provinceId: string) => {
+        const { data, error } = await supabase.from('municipalities').select('*').eq('province_id', provinceId).order('name');
+        if (!error && data) {
+            setMunicipalities(data.map(m => ({ id: m.id, provinceId: m.province_id, name: m.name })));
+        }
+    };
+
+    const fetchCommunes = async (municipalityId: string) => {
+        const { data, error } = await supabase.from('communes').select('*').eq('municipality_id', municipalityId).order('name');
         if (!error && data) setCommunes(data);
     };
 
@@ -72,17 +82,28 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
         }
     };
 
+    const handleAddMunicipality = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newMunicipalityName.trim() || !selectedProvinceId) return;
+        const { data, error } = await supabase.from('municipalities').insert({ name: newMunicipalityName, province_id: selectedProvinceId }).select().single();
+        if (!error && data) {
+            const mapped = { id: data.id, provinceId: data.province_id, name: data.name };
+            setMunicipalities(prev => [...prev, mapped].sort((a, b) => a.name.localeCompare(b.name)));
+            setNewMunicipalityName('');
+        }
+    };
+
     const handleAddCommune = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newCommuneName.trim() || !selectedProvinceId) return;
-        const { data, error } = await supabase.from('communes').insert({ name: newCommuneName, province_id: selectedProvinceId }).select().single();
+        if (!newCommuneName.trim() || !selectedMunicipalityId) return;
+        const { data, error } = await supabase.from('communes').insert({ name: newCommuneName, municipality_id: selectedMunicipalityId }).select().single();
         if (!error && data) {
             setCommunes(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
             setNewCommuneName('');
         }
     };
 
-    const handleDeleteLocation = async (table: 'countries' | 'provinces' | 'communes', id: string) => {
+    const handleDeleteLocation = async (table: 'countries' | 'provinces' | 'municipalities' | 'communes', id: string) => {
         if (!confirm('Tem certeza que deseja excluir?')) return;
         const { error } = await supabase.from(table).delete().eq('id', id);
         if (!error) {
@@ -92,12 +113,22 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
                     setSelectedCountryId('');
                     setProvinces([]);
                     setSelectedProvinceId('');
+                    setMunicipalities([]);
+                    setSelectedMunicipalityId('');
                     setCommunes([]);
                 }
             } else if (table === 'provinces') {
                 setProvinces(prev => prev.filter(p => p.id !== id));
                 if (selectedProvinceId === id) {
                     setSelectedProvinceId('');
+                    setMunicipalities([]);
+                    setSelectedMunicipalityId('');
+                    setCommunes([]);
+                }
+            } else if (table === 'municipalities') {
+                setMunicipalities(prev => prev.filter(m => m.id !== id));
+                if (selectedMunicipalityId === id) {
+                    setSelectedMunicipalityId('');
                     setCommunes([]);
                 }
             } else {
@@ -330,7 +361,7 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
             )}
 
             {activeTab === 'LOCATIONS' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     {/* Países */}
                     <div className="bg-white rounded-[32px] border shadow-sm flex flex-col overflow-hidden">
                         <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
@@ -359,6 +390,8 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
                                             setSelectedCountryId(country.id);
                                             fetchProvinces(country.id);
                                             setSelectedProvinceId('');
+                                            setMunicipalities([]);
+                                            setSelectedMunicipalityId('');
                                             setCommunes([]);
                                         }}
                                         className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border-2 ${selectedCountryId === country.id ? 'bg-emcn-gold/10 border-emcn-gold' : 'border-transparent hover:bg-slate-50'}`}
@@ -417,7 +450,9 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
                                                 key={province.id}
                                                 onClick={() => {
                                                     setSelectedProvinceId(province.id);
-                                                    fetchCommunes(province.id);
+                                                    fetchMunicipalities(province.id);
+                                                    setSelectedMunicipalityId('');
+                                                    setCommunes([]);
                                                 }}
                                                 className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border-2 ${selectedProvinceId === province.id ? 'bg-emcn-gold/10 border-emcn-gold' : 'border-transparent hover:bg-slate-50'}`}
                                             >
@@ -442,11 +477,11 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
                         </div>
                     </div>
 
-                    {/* Comunas */}
+                    {/* Municípios */}
                     <div className="bg-white rounded-[32px] border shadow-sm flex flex-col overflow-hidden">
                         <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
                             <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                                <Map size={18} className="text-emcn-gold" /> Comunas
+                                <MapPin size={18} className="text-emcn-gold" /> Municípios
                             </h3>
                             {selectedProvinceId && (
                                 <span className="text-[10px] font-black uppercase text-slate-400 bg-white px-2 py-1 rounded-lg border">
@@ -458,7 +493,70 @@ const ConfigPage: React.FC<ConfigPageProps> = ({ settings, setSettings }) => {
                             {!selectedProvinceId ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20">
                                     <MapPin size={48} className="opacity-10 mb-4" />
-                                    <p className="text-sm font-medium text-center px-6">Selecione uma província para gerir as comunas.</p>
+                                    <p className="text-sm font-medium text-center px-6">Selecione uma província para gerir os municípios.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <form onSubmit={handleAddMunicipality} className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={newMunicipalityName}
+                                            onChange={(e) => setNewMunicipalityName(e.target.value)}
+                                            placeholder="Novo município..."
+                                            className="flex-1 px-4 py-2 bg-slate-50 border-2 border-transparent focus:border-emcn-gold rounded-xl outline-none text-sm transition-all"
+                                        />
+                                        <button type="submit" className="p-2 bg-emcn-blue text-white rounded-xl hover:bg-slate-800 transition-colors">
+                                            <Plus size={20} />
+                                        </button>
+                                    </form>
+                                    <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+                                        {municipalities.map(municipality => (
+                                            <div
+                                                key={municipality.id}
+                                                onClick={() => {
+                                                    setSelectedMunicipalityId(municipality.id);
+                                                    fetchCommunes(municipality.id);
+                                                }}
+                                                className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border-2 ${selectedMunicipalityId === municipality.id ? 'bg-emcn-gold/10 border-emcn-gold' : 'border-transparent hover:bg-slate-50'}`}
+                                            >
+                                                <span className={`text-sm font-bold ${selectedMunicipalityId === municipality.id ? 'text-emcn-blue' : 'text-slate-600'}`}>{municipality.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteLocation('municipalities', municipality.id); }}
+                                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                    <ChevronRight size={16} className={selectedMunicipalityId === municipality.id ? 'text-emcn-gold' : 'text-slate-300'} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {municipalities.length === 0 && (
+                                            <p className="text-center py-10 text-xs text-slate-400">Nenhum município cadastrado.</p>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Comunas */}
+                    <div className="bg-white rounded-[32px] border shadow-sm flex flex-col overflow-hidden">
+                        <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                <Map size={18} className="text-emcn-gold" /> Comunas
+                            </h3>
+                            {selectedMunicipalityId && (
+                                <span className="text-[10px] font-black uppercase text-slate-400 bg-white px-2 py-1 rounded-lg border">
+                                    {municipalities.find(m => m.id === selectedMunicipalityId)?.name}
+                                </span>
+                            )}
+                        </div>
+                        <div className="p-6 space-y-4 flex-1">
+                            {!selectedMunicipalityId ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20">
+                                    <Map size={48} className="opacity-10 mb-4" />
+                                    <p className="text-sm font-medium text-center px-6">Selecione um município para gerir as comunas.</p>
                                 </div>
                             ) : (
                                 <>

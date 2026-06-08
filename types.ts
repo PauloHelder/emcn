@@ -39,6 +39,7 @@ export interface Student extends User {
   phone: string;
   countryId?: string;
   provinceId?: string;
+  municipalityId?: string;
   communeId?: string;
   addressDetails?: string;
 }
@@ -152,4 +153,10 @@ export interface EadProgress {
   student_id: string;
   lesson_id: string;
   completed_at: string;
+}
+
+export interface Municipality {
+  id: string;
+  provinceId: string;
+  name: string;
 }

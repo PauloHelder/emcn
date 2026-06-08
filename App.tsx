@@ -209,6 +209,7 @@ const App: React.FC = () => {
           enrollmentDate: s.enrollment_date,
           countryId: s.country_id,
           provinceId: s.province_id,
+          municipalityId: s.municipality_id,
           communeId: s.commune_id,
           addressDetails: s.address_details
         })));

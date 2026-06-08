@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Student, Country, Province, Commune } from '../types';
+import { Student, Country, Province, Municipality, Commune } from '../types';
 import { Plus, Search, Edit, Trash2, X, ChevronRight, Mail, Phone, Calendar, UserCheck, UserX, Globe, MapPin, Map } from 'lucide-react';
 import { supabase } from '../supabase';
 
@@ -16,11 +16,34 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
   // Location state
   const [countries, setCountries] = useState<Country[]>([]);
   const [provinces, setProvinces] = useState<Province[]>([]);
+  const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [communes, setCommunes] = useState<Commune[]>([]);
 
   React.useEffect(() => {
     fetchInitialLocations();
   }, []);
+
+  // Fetch lists automatically when editing
+  React.useEffect(() => {
+    if (showForm && formData.countryId) {
+      fetchProvinces(formData.countryId);
+      if (formData.provinceId) {
+        fetchMunicipalities(formData.provinceId);
+        if (formData.municipalityId) {
+          fetchCommunes(formData.municipalityId);
+        }
+      }
+    }
+  }, [showForm, formData.id]);
+
+  // Fetch lists automatically for selected student detail card
+  React.useEffect(() => {
+    if (selectedStudent) {
+      if (selectedStudent.countryId) fetchProvinces(selectedStudent.countryId);
+      if (selectedStudent.provinceId) fetchMunicipalities(selectedStudent.provinceId);
+      if (selectedStudent.municipalityId) fetchCommunes(selectedStudent.municipalityId);
+    }
+  }, [selectedStudent?.id]);
 
   const fetchInitialLocations = async () => {
     const { data } = await supabase.from('countries').select('*').order('name');
@@ -32,8 +55,15 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
     if (data) setProvinces(data);
   };
 
-  const fetchCommunes = async (provinceId: string) => {
-    const { data } = await supabase.from('communes').select('*').eq('province_id', provinceId).order('name');
+  const fetchMunicipalities = async (provinceId: string) => {
+    const { data } = await supabase.from('municipalities').select('*').eq('province_id', provinceId).order('name');
+    if (data) {
+      setMunicipalities(data.map(m => ({ id: m.id, provinceId: m.province_id, name: m.name })));
+    }
+  };
+
+  const fetchCommunes = async (municipalityId: string) => {
+    const { data } = await supabase.from('communes').select('*').eq('municipality_id', municipalityId).order('name');
     if (data) setCommunes(data);
   };
 
@@ -47,6 +77,7 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
         status: formData.status,
         country_id: formData.countryId || null,
         province_id: formData.provinceId || null,
+        municipality_id: formData.municipalityId || null,
         commune_id: formData.communeId || null,
         address_details: formData.addressDetails || null
       };
@@ -65,6 +96,7 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
             enrollmentDate: data.enrollment_date,
             countryId: data.country_id,
             provinceId: data.province_id,
+            municipalityId: data.municipality_id,
             communeId: data.commune_id,
             addressDetails: data.address_details
         } as Student;
@@ -87,6 +119,7 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
             enrollmentDate: data.enrollment_date,
             countryId: data.country_id,
             provinceId: data.province_id,
+            municipalityId: data.municipality_id,
             communeId: data.commune_id,
             addressDetails: data.address_details
         } as Student;
@@ -219,14 +252,15 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
                     <div className="text-sm font-medium">{selectedStudent.phone || '(Não informado)'}</div>
                   </div>
                 </div>
-                {selectedStudent.countryId && (
+                 {selectedStudent.countryId && (
                   <div className="flex items-center gap-4 text-slate-600">
                     <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center shrink-0"><Globe size={20} /></div>
                     <div>
-                      <div className="text-xs font-bold text-slate-400 uppercase">País / Província</div>
+                      <div className="text-xs font-bold text-slate-400 uppercase">Localização</div>
                       <div className="text-sm font-medium">
                         {countries.find(c => c.id === selectedStudent.countryId)?.name}
                         {selectedStudent.provinceId && ` · ${provinces.find(p => p.id === selectedStudent.provinceId)?.name}`}
+                        {selectedStudent.municipalityId && ` · ${municipalities.find(m => m.id === selectedStudent.municipalityId)?.name}`}
                       </div>
                       {selectedStudent.communeId && (
                         <div className="text-xs text-slate-400">
@@ -317,9 +351,10 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
                       value={formData.countryId || ''}
                       onChange={(e) => {
                         const id = e.target.value;
-                        setFormData(prev => ({ ...prev, countryId: id, provinceId: '', communeId: '' }));
+                        setFormData(prev => ({ ...prev, countryId: id, provinceId: '', municipalityId: '', communeId: '' }));
                         fetchProvinces(id);
                         setProvinces([]);
+                        setMunicipalities([]);
                         setCommunes([]);
                       }}
                       className="w-full px-3 py-2 bg-slate-50 border-0 rounded-xl text-sm appearance-none"
@@ -335,8 +370,9 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
                       value={formData.provinceId || ''}
                       onChange={(e) => {
                         const id = e.target.value;
-                        setFormData(prev => ({ ...prev, provinceId: id, communeId: '' }));
-                        fetchCommunes(id);
+                        setFormData(prev => ({ ...prev, provinceId: id, municipalityId: '', communeId: '' }));
+                        fetchMunicipalities(id);
+                        setMunicipalities([]);
                         setCommunes([]);
                       }}
                       className="w-full px-3 py-2 bg-slate-50 border-0 rounded-xl text-sm appearance-none disabled:opacity-40"
@@ -346,9 +382,26 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">Comuna</label>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Município</label>
                     <select
                       disabled={!formData.provinceId}
+                      value={formData.municipalityId || ''}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setFormData(prev => ({ ...prev, municipalityId: id, communeId: '' }));
+                        fetchCommunes(id);
+                        setCommunes([]);
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 border-0 rounded-xl text-sm appearance-none disabled:opacity-40"
+                    >
+                      <option value="">Selecione...</option>
+                      {municipalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Comuna</label>
+                    <select
+                      disabled={!formData.municipalityId}
                       value={formData.communeId || ''}
                       onChange={(e) => setFormData(prev => ({ ...prev, communeId: e.target.value }))}
                       className="w-full px-3 py-2 bg-slate-50 border-0 rounded-xl text-sm appearance-none disabled:opacity-40"
@@ -357,7 +410,7 @@ const StudentsPage: React.FC<StudentsPageProps> = ({ students, setStudents }) =>
                       {communes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <label className="block text-xs font-bold text-slate-500 mb-1">Bairro / Rua</label>
                     <input
                       value={formData.addressDetails || ''}
