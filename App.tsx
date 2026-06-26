@@ -21,7 +21,8 @@ import {
   Globe,
   MapPin,
   Map,
-  Video
+  Video,
+  CreditCard
 } from 'lucide-react';
 import {
   MOCK_TEACHERS,
@@ -52,6 +53,7 @@ import StudentEadPage from './pages/StudentEadPage';
 import ExamsPage from './pages/ExamsPage';
 import EadAdminPage from './pages/EadAdminPage';
 import ExamSubmissionsPage from './pages/ExamSubmissionsPage';
+import PaymentsPage from './pages/PaymentsPage';
 import { supabase } from './supabase';
 
 interface LayoutProps {
@@ -79,6 +81,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, students, handle
     { path: '/ead-admin', label: 'EAD / Aulas', icon: Video, roles: ['ADMIN', 'TEACHER'] },
     { path: '/provas', label: 'Provas', icon: FileText, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/provas-submissoes', label: 'Provas Entregues', icon: ClipboardCheck, roles: ['ADMIN', 'SECRETARY', 'TEACHER'] },
+    { path: '/pagamentos', label: 'Gestão Financeira', icon: CreditCard, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/usuarios', label: 'Usuários e Perfis', icon: ClipboardList, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['ADMIN'] },
   ];
@@ -188,6 +191,7 @@ const App: React.FC = () => {
   const [classes, setClasses] = useState<ClassGroup[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [enrollmentSettings, setEnrollmentSettings] = useState<EnrollmentSettings>(INITIAL_ENROLLMENT_SETTINGS);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const fetchAllData = async () => {
     try {
@@ -233,7 +237,8 @@ const App: React.FC = () => {
           enrollmentDeadline: c.enrollment_deadline,
           enrollmentMessage: c.enrollment_message,
           enrollmentRequirements: c.enrollment_requirements || [],
-          schoolId: c.school_id
+          schoolId: c.school_id,
+          monthlyFee: c.monthly_fee
         })));
       }
     } catch (error) {
@@ -262,8 +267,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchSettings(); // Fetch public settings on mount
+    
     // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         const user: User = {
           id: session.user.id,
@@ -271,44 +277,46 @@ const App: React.FC = () => {
           email: session.user.email || '',
           role: (session.user.user_metadata.role as any) || 'STUDENT',
         };
-        setCurrentUser(user);
 
-        // Enrich in background
-        const enrichProfile = async (uid: string) => {
-          try {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', uid)
-              .single();
+        // Fetch detailed profile immediately before clearing loading state
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
 
-            if (profile) {
-              setCurrentUser(prev => prev ? {
-                ...prev,
-                name: profile.name || prev.name,
-                role: profile.role || prev.role,
-                avatar: profile.avatar_url || prev.avatar
-              } : null);
-            }
-          } catch (err) {
-            console.warn('Initial profile enrichment failed:', err);
+          if (profile) {
+            user.name = profile.name || user.name;
+            user.role = profile.role || user.role;
+            user.avatar = profile.avatar_url || user.avatar;
           }
-        };
-        enrichProfile(session.user.id);
+        } catch (err) {
+          console.warn('Initial profile enrichment failed:', err);
+        }
+
+        setCurrentUser(user);
       }
+      setAuthLoading(false);
     });
 
     // Listen for changes on auth state (sign in, sign out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        // Set basic info immediately to allow login
-        const user: User = {
-          id: session.user.id,
-          name: session.user.user_metadata.name || session.user.email?.split('@')[0] || 'Usuário',
-          email: session.user.email || '',
-          role: (session.user.user_metadata.role as any) || 'STUDENT',
-        };
-        setCurrentUser(user);
+        setCurrentUser(prev => {
+          // If we already have this user and their role is enriched, preserve it!
+          if (prev && prev.id === session.user.id) {
+            return prev;
+          }
+
+          const user: User = {
+            id: session.user.id,
+            name: session.user.user_metadata.name || session.user.email?.split('@')[0] || 'Usuário',
+            email: session.user.email || '',
+            role: (session.user.user_metadata.role as any) || 'STUDENT',
+          };
+          return user;
+        });
 
         // Fetch detailed profile in background without blocking
         const enrichProfile = async () => {
@@ -320,12 +328,17 @@ const App: React.FC = () => {
               .single();
 
             if (profile) {
-              setCurrentUser(prev => prev ? {
-                ...prev,
-                name: profile.name || prev.name,
-                role: profile.role || prev.role,
-                avatar: profile.avatar_url || prev.avatar
-              } : null);
+              setCurrentUser(prev => {
+                if (prev && prev.id === session.user.id) {
+                  return {
+                    ...prev,
+                    name: profile.name || prev.name,
+                    role: profile.role || prev.role,
+                    avatar: profile.avatar_url || prev.avatar
+                  };
+                }
+                return prev;
+              });
             }
           } catch (err) {
             console.warn('Profile enrichment failed:', err);
@@ -346,6 +359,17 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-emcn-gold border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-slate-500 font-semibold text-sm">Carregando portal...</p>
+        </div>
+      </div>
+    );
+  }
 
 
 
@@ -384,6 +408,7 @@ const App: React.FC = () => {
         </Layout> : <Navigate to="/login" />} />
         <Route path="/provas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamsPage classes={classes} disciplines={disciplines} schools={schools} /></Layout> : <Navigate to="/login" />} />
         <Route path="/provas-submissoes" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamSubmissionsPage classes={classes} disciplines={disciplines} students={students} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/pagamentos" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><PaymentsPage classes={classes} students={students} /></Layout> : <Navigate to="/login" />} />
         <Route path="/ead-admin" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><EadAdminPage classes={classes} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
         <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>

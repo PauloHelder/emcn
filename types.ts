@@ -122,6 +122,7 @@ export interface ClassGroup {
   enrollmentDeadline?: string;
   enrollmentMessage?: string;
   enrollmentRequirements: string[];
+  monthlyFee?: number;
 }
 
 export interface EnrollmentSettings {
@@ -166,4 +167,14 @@ export interface Municipality {
   id: string;
   provinceId: string;
   name: string;
+}
+
+export interface Payment {
+  id: string;
+  studentId: string;
+  classId: string;
+  amount: number;
+  paymentDate: string;
+  monthsPaid: number;
+  referenceMonth: string;
 }

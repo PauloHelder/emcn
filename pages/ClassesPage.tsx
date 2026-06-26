@@ -1271,7 +1271,8 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                 if (editingClass) {
                   const updatePayload = {
                     name: formData.get('name') as string,
-                    year: parseInt(formData.get('year') as string)
+                    year: parseInt(formData.get('year') as string),
+                    monthly_fee: parseFloat(formData.get('monthlyFee') as string) || 0
                   };
                   const { data, error } = await supabase.from('classes').update(updatePayload).eq('id', editingClass.id).select().single();
                   if (!error && data) {
@@ -1279,7 +1280,8 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                       ...data,
                       isEnrollmentOpen: data.is_enrollment_open,
                       enrollmentRequirements: data.enrollment_requirements || [],
-                      schoolId: data.school_id
+                      schoolId: data.school_id,
+                      monthlyFee: data.monthly_fee
                     };
                     setClasses(prev => prev.map(c => c.id === editingClass.id ? mapped : c));
                     if (selectedClass?.id === editingClass.id) setSelectedClass(mapped);
@@ -1296,7 +1298,8 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                     sessions: [],
                     is_enrollment_open: false,
                     enrollment_requirements: [],
-                    school_id: selectedSchool?.id
+                    school_id: selectedSchool?.id,
+                    monthly_fee: parseFloat(formData.get('monthlyFee') as string) || 0
                   };
 
                   const { data, error } = await supabase.from('classes').insert([newClass]).select().single();
@@ -1305,7 +1308,8 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                       ...data,
                       isEnrollmentOpen: data.is_enrollment_open,
                       enrollmentRequirements: data.enrollment_requirements || [],
-                      schoolId: data.school_id
+                      schoolId: data.school_id,
+                      monthlyFee: data.monthly_fee
                     };
                     setClasses(prev => [...prev, mapped]);
                     setShowAddClass(false);
@@ -1323,6 +1327,10 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Ano Letivo</label>
                 <input name="year" type="number" defaultValue={editingClass?.year || new Date().getFullYear()} required className="w-full px-4 py-2 border rounded-xl" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Mensalidade (Ex: 50.00)</label>
+                <input name="monthlyFee" type="number" step="0.01" min="0" defaultValue={editingClass?.monthlyFee || 0} required className="w-full px-4 py-2 border rounded-xl" />
               </div>
               <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => { setShowAddClass(false); setEditingClass(null); }} className="flex-1 py-3 text-slate-600 font-bold">Cancelar</button>

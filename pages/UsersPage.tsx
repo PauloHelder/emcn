@@ -151,7 +151,7 @@ const UsersPage: React.FC = () => {
         const roles: Record<UserRole, { label: string, color: string }> = {
             ADMIN: { label: 'Administrador', color: 'bg-red-100 text-red-700' },
             SECRETARY: { label: 'Secretaria', color: 'bg-blue-100 text-blue-700' },
-            TEACHER: { label: 'Professor', color: 'bg-purple-100 text-purple-700' },
+            TEACHER: { label: 'Professor', color: 'bg-amber-100 text-amber-700' },
             STUDENT: { label: 'Aluno', color: 'bg-green-100 text-green-700' }
         };
         const r = roles[role] || roles.STUDENT;

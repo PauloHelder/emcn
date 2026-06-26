@@ -306,15 +306,13 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
                               : '-'}
                           </td>
                           <td className="px-6 py-5 text-right">
-                            {isSubmitted && grade.answers && selectedExam ? (
+                            {isSubmitted && selectedExam ? (
                               <button
                                 onClick={() => setSelectedSubmissionForGabarito({ grade, exam: selectedExam, student })}
                                 className="px-4 py-2 border-2 border-emcn-gold text-emcn-blue hover:bg-emcn-gold hover:text-white rounded-xl font-bold text-xs transition-all inline-flex items-center gap-2 cursor-pointer"
                               >
                                 <BookOpen size={14} /> Ver Gabarito
                               </button>
-                            ) : isSubmitted ? (
-                              <span className="text-xs text-slate-400 italic">Sem histórico de respostas</span>
                             ) : (
                               <span className="text-slate-300">-</span>
                             )}
@@ -353,6 +351,15 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
 
             {/* Scrollable Questions list */}
             <div className="p-8 flex-1 overflow-y-auto space-y-8">
+              {!selectedSubmissionForGabarito.grade.answers && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-6 rounded-2xl flex items-start gap-3">
+                  <AlertCircle className="shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <h5 className="font-bold text-sm">Respostas não gravadas</h5>
+                    <p className="text-xs text-amber-700 mt-1">Esta prova foi realizada antes da atualização do sistema, portanto as respostas específicas do aluno não foram registradas. Abaixo está sendo exibido apenas o gabarito oficial.</p>
+                  </div>
+                </div>
+              )}
               {selectedSubmissionForGabarito.exam.questions?.map((question, qIdx) => {
                 const qType = question.type || 'SINGLE_CHOICE';
                 const studentAnswer = selectedSubmissionForGabarito.grade.answers?.[qIdx];
@@ -395,13 +402,19 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
                         </span>
                       </div>
 
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        isCorrect ? 'bg-green-100 text-green-800' :
-                        isPartial ? 'bg-amber-100 text-amber-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {isCorrect ? 'Correta' : isPartial ? 'Parcial' : 'Incorreta'} (+{questionPoints.toFixed(2)} pts)
-                      </span>
+                      {selectedSubmissionForGabarito.grade.answers ? (
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          isCorrect ? 'bg-green-100 text-green-800' :
+                          isPartial ? 'bg-amber-100 text-amber-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {isCorrect ? 'Correta' : isPartial ? 'Parcial' : 'Incorreta'} (+{questionPoints.toFixed(2)} pts)
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                          Valor: {pointsPerQuestion.toFixed(2)} pts
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-slate-800 font-semibold">{question.text}</p>

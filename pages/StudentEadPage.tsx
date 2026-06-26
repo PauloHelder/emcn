@@ -67,7 +67,8 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
             ...c,
             isEnrollmentOpen: c.is_enrollment_open,
             schoolId: c.school_id,
-            enrollmentRequirements: c.enrollment_requirements || []
+            enrollmentRequirements: c.enrollment_requirements || [],
+            monthlyFee: c.monthly_fee
           }));
         
         setStudentClasses(myClasses);
