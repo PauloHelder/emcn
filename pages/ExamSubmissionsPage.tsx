@@ -30,6 +30,8 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
   const [loadingExams, setLoadingExams] = useState(false);
   const [loadingGrades, setLoadingGrades] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<string>('');
   const [selectedSubmissionForGabarito, setSelectedSubmissionForGabarito] = useState<{ grade: Grade; exam: Exam; student: Student } | null>(null);
 
   // Load all exams when class selection changes
@@ -37,9 +39,11 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
     if (selectedClassId) {
       fetchExamsForClass(selectedClassId);
       setSelectedExamId('');
+      setFilterStatus('');
     } else {
       setExams([]);
       setSelectedExamId('');
+      setFilterStatus('');
     }
   }, [selectedClassId]);
 
@@ -47,8 +51,10 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
   useEffect(() => {
     if (selectedExamId) {
       fetchGradesForExam(selectedExamId);
+      setFilterStatus('');
     } else {
       setGrades([]);
+      setFilterStatus('');
     }
   }, [selectedExamId]);
 
@@ -111,11 +117,25 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
     ? students.filter(s => selectedClass.students?.includes(s.id))
     : [];
 
-  // Filtered by search query
-  const filteredStudents = classStudents.filter(student => 
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtered by search query, status and sorted alphabetically
+  const filteredStudents = classStudents
+    .filter(student => {
+      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            student.email.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const grade = grades.find(g => g.studentId === student.id);
+      const isSubmitted = !!grade;
+      
+      let matchesStatus = true;
+      if (filterStatus === 'REALIZADA') {
+        matchesStatus = isSubmitted;
+      } else if (filterStatus === 'PENDENTE') {
+        matchesStatus = !isSubmitted;
+      }
+      
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   // Statistics calculations
   const totalStudentsCount = classStudents.length;
@@ -135,53 +155,65 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
           </h2>
           <p className="text-slate-500 font-medium mt-1">Consulte notas, gabaritos e submissões dos alunos por turma.</p>
         </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`px-6 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 border-2 transition-all cursor-pointer ${
+            showFilters 
+              ? 'bg-emcn-blue text-white border-emcn-blue shadow-lg shadow-emcn-blue/15' 
+              : 'bg-white text-slate-700 border-slate-100 hover:bg-slate-50'
+          }`}
+        >
+          <Filter size={18} /> {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+        </button>
       </div>
 
       {/* Filter Options */}
-      <div className="bg-white p-8 rounded-[32px] border shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-            <Filter size={14} className="text-emcn-gold" /> Selecione a Turma
-          </label>
-          <select
-            value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer"
-          >
-            <option value="">Selecione uma turma...</option>
-            {classes.map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({c.year})</option>
-            ))}
-          </select>
-        </div>
+      {showFilters && (
+        <div className="bg-white p-8 rounded-[32px] border shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top duration-300">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Filter size={14} className="text-emcn-gold" /> Selecione a Turma
+            </label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer"
+            >
+              <option value="">Selecione uma turma...</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({c.year})</option>
+              ))}
+            </select>
+          </div>
 
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-            <BookOpen size={14} className="text-emcn-gold" /> Selecione a Prova
-          </label>
-          <select
-            value={selectedExamId}
-            disabled={!selectedClassId || loadingExams}
-            onChange={(e) => setSelectedExamId(e.target.value)}
-            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loadingExams ? (
-              <option>Buscando provas...</option>
-            ) : !selectedClassId ? (
-              <option value="">Selecione primeiro uma turma...</option>
-            ) : exams.length === 0 ? (
-              <option value="">Nenhuma prova ativa encontrada nesta turma</option>
-            ) : (
-              <>
-                <option value="">Selecione uma prova...</option>
-                {exams.map(e => (
-                  <option key={e.id} value={e.id}>{e.title} ({getDisciplineName(e.disciplineId)})</option>
-                ))}
-              </>
-            )}
-          </select>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <BookOpen size={14} className="text-emcn-gold" /> Selecione a Prova
+            </label>
+            <select
+              value={selectedExamId}
+              disabled={!selectedClassId || loadingExams}
+              onChange={(e) => setSelectedExamId(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingExams ? (
+                <option>Buscando provas...</option>
+              ) : !selectedClassId ? (
+                <option value="">Selecione primeiro uma turma...</option>
+              ) : exams.length === 0 ? (
+                <option value="">Nenhuma prova ativa encontrada nesta turma</option>
+              ) : (
+                <>
+                  <option value="">Selecione uma prova...</option>
+                  {exams.map(e => (
+                    <option key={e.id} value={e.id}>{e.title} ({getDisciplineName(e.disciplineId)})</option>
+                  ))}
+                </>
+              )}
+            </select>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content Areas */}
       {!selectedClassId || !selectedExamId ? (
@@ -225,15 +257,26 @@ const ExamSubmissionsPage: React.FC<ExamSubmissionsPageProps> = ({ classes, disc
           <div className="bg-white rounded-[32px] border shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
               <h3 className="font-serif text-lg text-slate-800 font-bold">Submissões dos Alunos</h3>
-              <div className="relative w-full sm:w-72">
-                <Search size={18} className="absolute left-4 top-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar aluno..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all"
-                />
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                <div className="relative w-full sm:w-72">
+                  <Search size={18} className="absolute left-4 top-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar aluno..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all"
+                  />
+                </div>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full sm:w-44 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="">Todos os Status</option>
+                  <option value="REALIZADA">Realizada</option>
+                  <option value="PENDENTE">Pendente</option>
+                </select>
               </div>
             </div>
 

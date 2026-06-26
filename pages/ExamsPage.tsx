@@ -15,6 +15,10 @@ const ExamsPage: React.FC<ExamsPageProps> = ({ classes, disciplines, schools }) 
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterClassId, setFilterClassId] = useState('');
+  const [filterDisciplineId, setFilterDisciplineId] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showQuestionsModal, setShowQuestionsModal] = useState(false);
@@ -202,10 +206,15 @@ const ExamsPage: React.FC<ExamsPageProps> = ({ classes, disciplines, schools }) 
     }
   };
 
-  const filteredExams = exams.filter(e => 
-    e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.subject?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredExams = exams.filter(e => {
+    const matchesSearch = e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          e.subject?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesClass = filterClassId ? e.classId === filterClassId : true;
+    const matchesDiscipline = filterDisciplineId ? e.disciplineId === filterDisciplineId : true;
+    const matchesStatus = filterStatus ? e.status === filterStatus : true;
+    
+    return matchesSearch && matchesClass && matchesDiscipline && matchesStatus;
+  });
 
   const getClassName = (id: string) => classes.find(c => c.id === id)?.name || 'Turma não encontrada';
   const getDisciplineName = (id: string) => disciplines.find(d => d.id === id)?.name || 'Disciplina não encontrada';
@@ -234,7 +243,7 @@ const ExamsPage: React.FC<ExamsPageProps> = ({ classes, disciplines, schools }) 
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1 relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emcn-gold transition-colors" size={20} />
           <input
@@ -245,7 +254,74 @@ const ExamsPage: React.FC<ExamsPageProps> = ({ classes, disciplines, schools }) 
             className="w-full pl-12 pr-4 py-4 bg-white border-2 border-slate-100 rounded-2xl focus:border-emcn-gold outline-none transition-all shadow-sm"
           />
         </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 border-2 transition-all cursor-pointer ${
+            showFilters 
+              ? 'bg-emcn-blue text-white border-emcn-blue shadow-lg shadow-emcn-blue/15' 
+              : 'bg-white text-slate-700 border-slate-100 hover:bg-slate-50'
+          }`}
+        >
+          <Filter size={20} /> {showFilters ? 'Ocultar Filtros' : 'Filtrar'}
+        </button>
       </div>
+
+      {showFilters && (
+        <div className="bg-white p-6 rounded-[28px] border-2 border-slate-50 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4 animate-in slide-in-from-top duration-300">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar por Turma</label>
+            <select
+              value={filterClassId}
+              onChange={(e) => setFilterClassId(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none cursor-pointer"
+            >
+              <option value="">Todas as Turmas</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar por Disciplina</label>
+            <select
+              value={filterDisciplineId}
+              onChange={(e) => setFilterDisciplineId(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none cursor-pointer"
+            >
+              <option value="">Todas as Disciplinas</option>
+              {disciplines.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Filtrar por Status</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none cursor-pointer"
+            >
+              <option value="">Todos os Status</option>
+              <option value="ACTIVE">Ativo / Publicado</option>
+              <option value="DRAFT">Rascunho / Inativo</option>
+            </select>
+          </div>
+          {(filterClassId || filterDisciplineId || filterStatus) && (
+            <div className="sm:col-span-3 flex justify-end">
+              <button
+                onClick={() => {
+                  setFilterClassId('');
+                  setFilterDisciplineId('');
+                  setFilterStatus('');
+                }}
+                className="text-xs text-red-500 font-bold hover:underline uppercase cursor-pointer"
+              >
+                Limpar Filtros
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredExams.map(exam => (

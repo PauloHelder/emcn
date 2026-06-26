@@ -36,6 +36,8 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<string>('');
   
   // Modals state
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -56,8 +58,13 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
   useEffect(() => {
     if (selectedClassId) {
       fetchPayments();
+      setFilterStatus('');
     }
   }, [selectedClassId]);
+
+  useEffect(() => {
+    setFilterStatus('');
+  }, [selectedMonth]);
 
   const fetchPayments = async () => {
     setLoadingPayments(true);
@@ -112,10 +119,25 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
     : [];
 
   const filteredStudents = classStudents
-    .filter(student => 
-      student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.email.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    .filter(student => {
+      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            student.email.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const activePayment = payments.find(p => 
+        p.studentId === student.id && 
+        isMonthCovered(p.referenceMonth, p.monthsPaid, selectedMonth)
+      );
+      const isPaid = !!activePayment;
+      
+      let matchesStatus = true;
+      if (filterStatus === 'PAGO') {
+        matchesStatus = isPaid;
+      } else if (filterStatus === 'PENDENTE') {
+        matchesStatus = !isPaid;
+      }
+      
+      return matchesSearch && matchesStatus;
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // Financial calculations
@@ -228,43 +250,57 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
-      <div>
-        <h2 className="text-3xl font-serif text-slate-800 flex items-center gap-3">
-          <CreditCard className="text-emcn-gold" size={32} /> Gestão Financeira / Mensalidades
-        </h2>
-        <p className="text-slate-500 font-medium mt-1">Monitore mensalidades, faturamento estimado e controle de adimplência.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-serif text-slate-800 flex items-center gap-3">
+            <CreditCard className="text-emcn-gold" size={32} /> Gestão Financeira / Mensalidades
+          </h2>
+          <p className="text-slate-500 font-medium mt-1">Monitore mensalidades, faturamento estimado e controle de adimplência.</p>
+        </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`px-6 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 border-2 transition-all cursor-pointer ${
+            showFilters 
+              ? 'bg-emcn-blue text-white border-emcn-blue shadow-lg shadow-emcn-blue/15' 
+              : 'bg-white text-slate-700 border-slate-100 hover:bg-slate-50'
+          }`}
+        >
+          <Filter size={18} /> {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+        </button>
       </div>
 
       {/* Dropdown Filters */}
-      <div className="bg-white p-8 rounded-[32px] border shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-            <Filter size={14} className="text-emcn-gold" /> Selecione a Turma
-          </label>
-          <select
-            value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer"
-          >
-            <option value="">Selecione uma turma...</option>
-            {classes.map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({c.year})</option>
-            ))}
-          </select>
-        </div>
+      {showFilters && (
+        <div className="bg-white p-8 rounded-[32px] border shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top duration-300">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Filter size={14} className="text-emcn-gold" /> Selecione a Turma
+            </label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer"
+            >
+              <option value="">Selecione uma turma...</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({c.year})</option>
+              ))}
+            </select>
+          </div>
 
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-            <Calendar size={14} className="text-emcn-gold" /> Mês de Referência
-          </label>
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer"
-          />
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Calendar size={14} className="text-emcn-gold" /> Mês de Referência
+            </label>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all duration-300 cursor-pointer"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main content display */}
       {!selectedClassId ? (
@@ -318,15 +354,26 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
           <div className="bg-white rounded-[32px] border shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
               <h3 className="font-serif text-lg text-slate-800 font-bold">Relação de Mensalidades da Turma</h3>
-              <div className="relative w-full sm:w-72">
-                <Search size={18} className="absolute left-4 top-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar aluno..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all"
-                />
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                <div className="relative w-full sm:w-72">
+                  <Search size={18} className="absolute left-4 top-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar aluno..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all"
+                  />
+                </div>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full sm:w-44 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emcn-gold focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="">Todos os Status</option>
+                  <option value="PAGO">Pago</option>
+                  <option value="PENDENTE">Pendente</option>
+                </select>
               </div>
             </div>
 
@@ -345,6 +392,7 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50/20">
+                      <th className="px-6 py-4 w-12 text-center">#</th>
                       <th className="px-6 py-4">Aluno</th>
                       <th className="px-6 py-4">Status ({getFormatMonthName(selectedMonth).split(' de ')[0]})</th>
                       <th className="px-6 py-4">Último Pagamento</th>
@@ -352,7 +400,7 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStudents.map(student => {
+                    {filteredStudents.map((student, idx) => {
                       // Find payment record covering the selected month
                       const activePayment = payments.find(p => 
                         p.studentId === student.id && 
@@ -369,6 +417,7 @@ const PaymentsPage: React.FC<PaymentsPageProps> = ({ classes, students }) => {
 
                       return (
                         <tr key={student.id} className="border-b border-slate-50 hover:bg-slate-50/30 transition-all">
+                          <td className="px-6 py-5 text-sm font-bold text-slate-400 text-center w-12">{idx + 1}</td>
                           <td className="px-6 py-5">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-650 font-bold border">

@@ -73,7 +73,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, students, handle
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/inscricoes-gestao', label: 'Inscrições Pendentes', icon: UserPlus, badge: pendingEnrollmentsCount, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/area-aluno', label: 'Minha Área', icon: Award, roles: ['STUDENT'] },
-    { path: '/ead', label: 'Aulas EAD', icon: Video, roles: ['STUDENT', 'ADMIN'] },
     { path: '/professores', label: 'Corpo Docente', icon: GraduationCap, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/alunos', label: 'Gestão de Alunos', icon: Users, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/disciplinas', label: 'Matriz Curricular', icon: BookOpen, roles: ['ADMIN', 'SECRETARY'] },
@@ -381,7 +380,6 @@ const App: React.FC = () => {
         <Route path="/login" element={!currentUser ? <LoginPage /> : <Navigate to="/dashboard" />} />
         <Route path="/inscricao" element={<EnrollmentPage settings={enrollmentSettings} students={students} setStudents={setStudents} classes={classes} schools={schools} />} />
         <Route path="/area-aluno" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><StudentArea currentUser={currentUser} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/ead" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><StudentEadPage currentUser={currentUser} /></Layout> : <Navigate to="/login" />} />
         <Route path="/usuarios" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><UsersPage /></Layout> : <Navigate to="/dashboard" />} />
 
         {/* Private Routes */}
