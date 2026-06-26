@@ -51,6 +51,16 @@ export interface Discipline {
   workload: number; // in hours
 }
 
+export type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+
+export interface Question {
+  text: string;
+  type?: QuestionType; // optional for backward compatibility (defaults to SINGLE_CHOICE)
+  options: string[];
+  correctIndex?: number; // for SINGLE_CHOICE and TRUE_FALSE
+  correctIndices?: number[]; // for MULTIPLE_CHOICE
+}
+
 export interface Exam {
   id: string;
   classId: string;
@@ -61,11 +71,7 @@ export interface Exam {
   date: string;
   dueDate?: string;
   maxScore: number;
-  questions?: Array<{
-    text: string;
-    options: string[];
-    correctIndex: number;
-  }>;
+  questions?: Question[];
   status?: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
 }
 
@@ -92,6 +98,7 @@ export interface Grade {
   examId: string;
   studentId: string;
   score: number;
+  answers?: Record<number, number | number[]>;
   comments?: string;
 }
 

@@ -41,9 +41,10 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
   // Exam taking state
   const [examInProgress, setExamInProgress] = useState<Exam | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [answers, setAnswers] = useState<Record<number, number | number[]>>({});
   const [submittingExam, setSubmittingExam] = useState(false);
   const [expandedDisciplines, setExpandedDisciplines] = useState<Record<string, boolean>>({});
+  const [selectedGradeForGabarito, setSelectedGradeForGabarito] = useState<{ grade: Grade; exam: Exam } | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -116,7 +117,7 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
         if (authGrades) finalGrades = authGrades;
       }
       
-      setGrades(finalGrades.map((g: any) => ({ ...g, examId: g.exam_id, studentId: g.student_id })));
+      setGrades(finalGrades.map((g: any) => ({ ...g, examId: g.exam_id, studentId: g.student_id, answers: g.answers })));
 
     } catch (err) {
       console.error('Error fetching student area data:', err);
@@ -179,11 +180,25 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
 
     setSubmittingExam(true);
     try {
-      // Calculate score
+      // Calculate score with partial scoring for multiple choice questions
       let correctCount = 0;
       questions.forEach((q, idx) => {
-        if (answers[idx] === q.correctIndex) {
-          correctCount++;
+        const qType = q.type || 'SINGLE_CHOICE';
+        const studentAnswer = answers[idx];
+
+        if (qType === 'SINGLE_CHOICE' || qType === 'TRUE_FALSE') {
+          if (studentAnswer === q.correctIndex) {
+            correctCount += 1;
+          }
+        } else if (qType === 'MULTIPLE_CHOICE') {
+          const studentAnswers = (studentAnswer as number[]) || [];
+          const correctIndices = q.correctIndices || [];
+          if (correctIndices.length > 0) {
+            const correctSelected = studentAnswers.filter(a => correctIndices.includes(a)).length;
+            const incorrectSelected = studentAnswers.filter(a => !correctIndices.includes(a)).length;
+            const questionScoreFraction = Math.max(0, (correctSelected - incorrectSelected) / correctIndices.length);
+            correctCount += questionScoreFraction;
+          }
         }
       });
 
@@ -195,6 +210,7 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
         exam_id: examInProgress.id,
         student_id: studentProfileId,
         score: score,
+        answers: answers,
         comments: `Prova realizada online em ${new Date().toLocaleString()}`
       });
 
@@ -207,7 +223,8 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
         id: 'temp-' + Date.now(), 
         examId: examInProgress.id, 
         studentId: studentProfileId, 
-        score 
+        score,
+        answers
       };
       setGrades(prev => [...prev, newGrade]);
       setExamInProgress(null);
@@ -608,15 +625,26 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
                         </div>
                       </div>
                       
-                      <div className="text-center sm:text-right bg-slate-50 sm:bg-transparent p-6 sm:p-0 rounded-2xl w-full sm:w-auto">
-                        <div className="space-y-1">
-                          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sua Nota</div>
-                          <div className="text-4xl font-serif font-black text-emcn-blue">
-                            {grade.score.toFixed(1)}
-                            <span className="text-lg text-slate-300 font-sans ml-1">/ {exam?.maxScore || 10}</span>
-                          </div>
-                          <div className={`text-xs font-bold ${grade.score >= ((exam?.maxScore || 10) * 0.7) ? 'text-green-600' : 'text-red-500'}`}>
-                            {grade.score >= ((exam?.maxScore || 10) * 0.7) ? 'Aprovado' : 'Abaixo da Média'}
+                      <div className="flex flex-col sm:flex-row items-center gap-6 w-full sm:w-auto justify-end flex-1">
+                        {exam && exam.questions && exam.questions.length > 0 && (
+                          <button
+                            onClick={() => setSelectedGradeForGabarito({ grade, exam })}
+                            className="w-full sm:w-auto px-5 py-2.5 border-2 border-emcn-gold text-emcn-blue hover:bg-emcn-gold hover:text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <BookOpen size={14} /> Ver Gabarito
+                          </button>
+                        )}
+                        
+                        <div className="text-center sm:text-right bg-slate-50 sm:bg-transparent p-6 sm:p-0 rounded-2xl w-full sm:w-auto min-w-[120px]">
+                          <div className="space-y-1">
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sua Nota</div>
+                            <div className="text-4xl font-serif font-black text-emcn-blue">
+                              {grade.score.toFixed(1)}
+                              <span className="text-lg text-slate-300 font-sans ml-1">/ {exam?.maxScore || 10}</span>
+                            </div>
+                            <div className={`text-xs font-bold ${grade.score >= ((exam?.maxScore || 10) * 0.7) ? 'text-green-600' : 'text-red-500'}`}>
+                              {grade.score >= ((exam?.maxScore || 10) * 0.7) ? 'Aprovado' : 'Abaixo da Média'}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -675,7 +703,18 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="text-2xl font-serif">{examInProgress.title}</h3>
-                  <p className="text-white/60 text-sm mt-1">{getDisciplineName(examInProgress.disciplineId)} • Questão {currentQuestionIndex + 1} de {examInProgress.questions?.length || 0}</p>
+                  <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                    <p className="text-white/60 text-sm">{getDisciplineName(examInProgress.disciplineId)} • Questão {currentQuestionIndex + 1} de {examInProgress.questions?.length || 0}</p>
+                    <span className={`px-2 py-0.5 text-[9px] font-black tracking-wider rounded-md uppercase ${
+                      (examInProgress.questions[currentQuestionIndex].type || 'SINGLE_CHOICE') === 'TRUE_FALSE' ? 'bg-blue-500/20 text-blue-200 border border-blue-400/30' :
+                      (examInProgress.questions[currentQuestionIndex].type || 'SINGLE_CHOICE') === 'MULTIPLE_CHOICE' ? 'bg-amber-500/20 text-amber-200 border border-amber-400/30' :
+                      'bg-white/10 text-slate-200 border border-white/10'
+                    }`}>
+                      {(examInProgress.questions[currentQuestionIndex].type || 'SINGLE_CHOICE') === 'TRUE_FALSE' ? 'Verd/Falso' :
+                       (examInProgress.questions[currentQuestionIndex].type || 'SINGLE_CHOICE') === 'MULTIPLE_CHOICE' ? 'Múltipla Escolha' :
+                       'Escolha Única'}
+                    </span>
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-black uppercase tracking-widest text-emcn-gold mb-1">Nota Máxima</p>
@@ -701,35 +740,54 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
                   </h4>
 
                   <div className="grid grid-cols-1 gap-4">
-                    {examInProgress.questions[currentQuestionIndex].options.map((option, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setAnswers({ ...answers, [currentQuestionIndex]: idx })}
-                        className={`group p-6 rounded-3xl border-2 transition-all flex items-center gap-6 text-left ${
-                          answers[currentQuestionIndex] === idx
-                            ? 'border-emcn-gold bg-emcn-gold/5 shadow-lg shadow-emcn-gold/10'
-                            : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg transition-all ${
-                          answers[currentQuestionIndex] === idx
-                            ? 'bg-emcn-gold text-white scale-110'
-                            : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
-                        }`}>
-                          {String.fromCharCode(65 + idx)}
-                        </div>
-                        <span className={`text-lg font-medium flex-1 ${
-                          answers[currentQuestionIndex] === idx ? 'text-slate-800' : 'text-slate-600'
-                        }`}>
-                          {option}
-                        </span>
-                        {answers[currentQuestionIndex] === idx && (
-                          <div className="w-6 h-6 bg-emcn-gold rounded-full flex items-center justify-center text-white">
-                            <Check size={14} strokeWidth={4} />
+                    {examInProgress.questions[currentQuestionIndex].options.map((option, idx) => {
+                      const qType = examInProgress.questions![currentQuestionIndex].type || 'SINGLE_CHOICE';
+                      const isMultiple = qType === 'MULTIPLE_CHOICE';
+                      
+                      const isSelected = isMultiple
+                        ? ((answers[currentQuestionIndex] as number[]) || []).includes(idx)
+                        : answers[currentQuestionIndex] === idx;
+
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            if (isMultiple) {
+                              const currentSelected = (answers[currentQuestionIndex] as number[]) || [];
+                              const newSelected = currentSelected.includes(idx)
+                                ? currentSelected.filter(i => i !== idx)
+                                : [...currentSelected, idx];
+                              setAnswers({ ...answers, [currentQuestionIndex]: newSelected });
+                            } else {
+                              setAnswers({ ...answers, [currentQuestionIndex]: idx });
+                            }
+                          }}
+                          className={`group p-6 rounded-3xl border-2 transition-all flex items-center gap-6 text-left ${
+                            isSelected
+                              ? 'border-emcn-gold bg-emcn-gold/5 shadow-lg shadow-emcn-gold/10'
+                              : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg transition-all ${
+                            isSelected
+                              ? 'bg-emcn-gold text-white scale-110'
+                              : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
+                          }`}>
+                            {String.fromCharCode(65 + idx)}
                           </div>
-                        )}
-                      </button>
-                    ))}
+                          <span className={`text-lg font-medium flex-1 ${
+                            isSelected ? 'text-slate-800 font-bold' : 'text-slate-600'
+                          }`}>
+                            {option}
+                          </span>
+                          {isSelected && (
+                            <div className="w-6 h-6 bg-emcn-gold rounded-full flex items-center justify-center text-white flex-shrink-0 animate-in zoom-in duration-200">
+                              <Check size={14} strokeWidth={4} />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ) : (
@@ -783,6 +841,146 @@ const StudentArea: React.FC<StudentAreaProps> = ({ currentUser }) => {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Grade for Gabarito Overlay */}
+      {selectedGradeForGabarito && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="bg-emcn-blue p-8 text-white relative flex-shrink-0">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-2xl font-serif">Gabarito: {selectedGradeForGabarito.exam.title}</h3>
+                  <p className="text-white/60 text-sm mt-1.5">{getDisciplineName(selectedGradeForGabarito.exam.disciplineId)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emcn-gold mb-1">Nota Obtida</p>
+                  <p className="text-2xl font-bold text-emcn-gold">
+                    {selectedGradeForGabarito.grade.score.toFixed(1)}
+                    <span className="text-sm font-normal text-white/50 ml-1">/ {selectedGradeForGabarito.exam.maxScore}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable Questions list */}
+            <div className="p-8 flex-1 overflow-y-auto space-y-8">
+              {selectedGradeForGabarito.exam.questions?.map((question, qIdx) => {
+                const qType = question.type || 'SINGLE_CHOICE';
+                const studentAnswer = selectedGradeForGabarito.grade.answers?.[qIdx];
+                
+                // Calculate question score and status
+                let isCorrect = false;
+                let isPartial = false;
+                let questionPoints = 0;
+                const pointsPerQuestion = selectedGradeForGabarito.exam.maxScore / (selectedGradeForGabarito.exam.questions?.length || 1);
+
+                if (qType === 'SINGLE_CHOICE' || qType === 'TRUE_FALSE') {
+                  isCorrect = studentAnswer === question.correctIndex;
+                  questionPoints = isCorrect ? pointsPerQuestion : 0;
+                } else if (qType === 'MULTIPLE_CHOICE') {
+                  const studentAnswers = (studentAnswer as number[]) || [];
+                  const correctIndices = question.correctIndices || [];
+                  if (correctIndices.length > 0) {
+                    const correctSelected = studentAnswers.filter(a => correctIndices.includes(a)).length;
+                    const incorrectSelected = studentAnswers.filter(a => !correctIndices.includes(a)).length;
+                    const fraction = Math.max(0, (correctSelected - incorrectSelected) / correctIndices.length);
+                    isCorrect = fraction === 1;
+                    isPartial = fraction > 0 && fraction < 1;
+                    questionPoints = fraction * pointsPerQuestion;
+                  }
+                }
+
+                return (
+                  <div key={qIdx} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+                    <div className="flex justify-between items-start gap-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800">Questão {qIdx + 1}</span>
+                        <span className={`px-2 py-0.5 text-[9px] font-black tracking-wider rounded-md uppercase ${
+                          qType === 'TRUE_FALSE' ? 'bg-blue-100 text-blue-800' :
+                          qType === 'MULTIPLE_CHOICE' ? 'bg-amber-100 text-amber-800' :
+                          'bg-slate-200 text-slate-700'
+                        }`}>
+                          {qType === 'TRUE_FALSE' ? 'Verd/Falso' :
+                           qType === 'MULTIPLE_CHOICE' ? 'Múltipla Escolha' :
+                           'Escolha Única'}
+                        </span>
+                      </div>
+
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        isCorrect ? 'bg-green-100 text-green-800' :
+                        isPartial ? 'bg-amber-100 text-amber-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {isCorrect ? 'Correta' : isPartial ? 'Parcial' : 'Incorreta'} (+{questionPoints.toFixed(2)} pts)
+                      </span>
+                    </div>
+
+                    <p className="text-slate-800 font-semibold">{question.text}</p>
+
+                    <div className="grid grid-cols-1 gap-2 pt-2">
+                      {question.options.map((option, oIdx) => {
+                        const isCorrectOption = qType === 'MULTIPLE_CHOICE'
+                          ? (question.correctIndices || []).includes(oIdx)
+                          : question.correctIndex === oIdx;
+
+                        const isSelectedByStudent = qType === 'MULTIPLE_CHOICE'
+                          ? ((studentAnswer as number[]) || []).includes(oIdx)
+                          : studentAnswer === oIdx;
+
+                        let optionStyle = 'border-slate-200 bg-white text-slate-700';
+                        let icon = null;
+
+                        if (isCorrectOption) {
+                          optionStyle = 'border-green-300 bg-green-50 text-green-900 font-semibold';
+                          icon = <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white flex-shrink-0"><Check size={12} strokeWidth={4} /></div>;
+                        } else if (isSelectedByStudent && !isCorrectOption) {
+                          optionStyle = 'border-red-300 bg-red-50 text-red-900 font-semibold';
+                          icon = <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white flex-shrink-0"><XCircle size={12} /></div>;
+                        }
+
+                        return (
+                          <div
+                            key={oIdx}
+                            className={`p-4 rounded-2xl border-2 flex items-center justify-between gap-4 text-sm ${optionStyle}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                                isCorrectOption ? 'bg-green-200 text-green-800' :
+                                isSelectedByStudent ? 'bg-red-200 text-red-800' :
+                                'bg-slate-100 text-slate-400'
+                              }`}>
+                                {String.fromCharCode(65 + oIdx)}
+                              </span>
+                              <span>{option}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isSelectedByStudent && (
+                                <span className="text-[10px] uppercase font-bold text-slate-400">Sua escolha</span>
+                              )}
+                              {icon}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="p-8 bg-slate-50 border-t flex justify-end flex-shrink-0">
+              <button
+                onClick={() => setSelectedGradeForGabarito(null)}
+                className="px-8 py-3 bg-emcn-blue text-white rounded-2xl font-bold hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>

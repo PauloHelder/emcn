@@ -6,7 +6,7 @@ import {
   Layers, Edit, Trash2, CheckSquare, Settings, Loader2, Check, UserCheck, UserX, AlertCircle, FileText, HelpCircle, ListChecks
 } from 'lucide-react';
 import { supabase } from '../supabase';
-import { Exam } from '../types';
+import { Exam, Question, QuestionType } from '../types';
 
 interface ClassesPageProps {
   classes: ClassGroup[];
@@ -65,10 +65,13 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
   const [showSessionForm, setShowSessionForm] = useState(false);
   const [sessionFormData, setSessionFormData] = useState<Partial<ClassSession>>({ date: new Date().toISOString().split('T')[0] });
   const [loading, setLoading] = useState(false);
-  const [questionFormData, setQuestionFormData] = useState({
+  const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
+  const [questionFormData, setQuestionFormData] = useState<Question>({
     text: '',
+    type: 'SINGLE_CHOICE',
     options: ['', '', '', ''],
-    correctIndex: 0
+    correctIndex: 0,
+    correctIndices: [0]
   });
 
   useEffect(() => {
@@ -688,7 +691,8 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                       </div>
                       <button
                         onClick={() => {
-                          setQuestionFormData({ text: '', options: ['', '', '', ''], correctIndex: 0 });
+                          setQuestionFormData({ text: '', type: 'SINGLE_CHOICE', options: ['', '', '', ''], correctIndex: 0, correctIndices: [0] });
+                          setEditingQuestionIndex(null);
                           setShowQuestionForm(true);
                         }}
                         className="px-8 py-3 bg-emcn-blue text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all shadow-xl shadow-emcn-blue/20 flex items-center gap-2"
@@ -700,50 +704,88 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                     <div className="p-10 space-y-8">
                       {selectedExam.questions && selectedExam.questions.length > 0 ? (
                         <div className="space-y-6">
-                          {selectedExam.questions.map((q: any, idx: number) => (
-                            <div key={idx} className="bg-white p-8 rounded-[32px] border-2 border-slate-50 hover:border-slate-100 transition-all group">
-                              <div className="flex justify-between items-start mb-6">
-                                <div className="flex gap-4">
-                                  <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-bold text-slate-400">
-                                    {idx + 1}
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="text-lg font-bold text-slate-800 leading-tight">{q.text}</h4>
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={async () => {
-                                    if (!confirm('Excluir esta questão?')) return;
-                                    const newQuestions = selectedExam.questions.filter((_: any, i: number) => i !== idx);
-                                    const { error } = await supabase.from('exams').update({ questions: newQuestions }).eq('id', selectedExam.id);
-                                    if (!error) {
-                                      const updatedExam = { ...selectedExam, questions: newQuestions };
-                                      setSelectedExam(updatedExam);
-                                      setExams(prev => prev.map(e => e.id === updatedExam.id ? updatedExam : e));
-                                    }
-                                  }}
-                                  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-14">
-                                {q.options.map((opt: string, optIdx: number) => (
-                                  <div
-                                    key={optIdx}
-                                    className={`p-4 rounded-2xl border-2 text-sm font-medium flex items-center gap-3 ${optIdx === q.correctIndex ? 'border-green-100 bg-green-50 text-green-700' : 'border-slate-50 text-slate-500'}`}
-                                  >
-                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${optIdx === q.correctIndex ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                      {String.fromCharCode(65 + optIdx)}
-                                    </div>
-                                    {opt}
-                                    {optIdx === q.correctIndex && <Check size={14} className="ml-auto" />}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
+                          {selectedExam.questions.map((q: any, idx: number) => {
+                             const qType = q.type || 'SINGLE_CHOICE';
+                             return (
+                               <div key={idx} className="bg-white p-8 rounded-[32px] border-2 border-slate-50 hover:border-slate-100 transition-all group">
+                                 <div className="flex justify-between items-start mb-6">
+                                   <div className="flex gap-4">
+                                     <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-bold text-slate-400">
+                                       {idx + 1}
+                                     </div>
+                                     <div className="flex-1">
+                                       <div className="flex items-center gap-2 mb-1">
+                                         <span className={`px-2 py-0.5 text-[9px] font-black tracking-wider rounded-md uppercase ${
+                                           qType === 'TRUE_FALSE' ? 'bg-blue-100 text-blue-800' :
+                                           qType === 'MULTIPLE_CHOICE' ? 'bg-amber-100 text-amber-800' :
+                                           'bg-slate-100 text-slate-800'
+                                         }`}>
+                                           {qType === 'TRUE_FALSE' ? 'Verdadeiro ou Falso' :
+                                            qType === 'MULTIPLE_CHOICE' ? 'Múltipla Escolha' :
+                                            'Escolha Única'}
+                                         </span>
+                                       </div>
+                                       <h4 className="text-lg font-bold text-slate-800 leading-tight">{q.text}</h4>
+                                     </div>
+                                   </div>
+                                   <div className="flex gap-1 flex-shrink-0">
+                                     <button
+                                       onClick={() => {
+                                         setQuestionFormData({
+                                           text: q.text,
+                                           type: qType,
+                                           options: q.options,
+                                           correctIndex: q.correctIndex ?? 0,
+                                           correctIndices: q.correctIndices || []
+                                         });
+                                         setEditingQuestionIndex(idx);
+                                         setShowQuestionForm(true);
+                                       }}
+                                       className="p-2 text-slate-400 hover:text-emcn-blue hover:bg-slate-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                       title="Editar Questão"
+                                     >
+                                       <Edit size={18} />
+                                     </button>
+                                     <button
+                                       onClick={async () => {
+                                         if (!confirm('Excluir esta questão?')) return;
+                                         const newQuestions = selectedExam.questions.filter((_: any, i: number) => i !== idx);
+                                         const { error } = await supabase.from('exams').update({ questions: newQuestions }).eq('id', selectedExam.id);
+                                         if (!error) {
+                                           const updatedExam = { ...selectedExam, questions: newQuestions };
+                                           setSelectedExam(updatedExam);
+                                           setExams(prev => prev.map(e => e.id === updatedExam.id ? updatedExam : e));
+                                         }
+                                       }}
+                                       className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                     >
+                                       <Trash2 size={18} />
+                                     </button>
+                                   </div>
+                                 </div>
+ 
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-14">
+                                   {q.options.map((opt: string, optIdx: number) => {
+                                     const isCorrect = qType === 'MULTIPLE_CHOICE'
+                                       ? q.correctIndices?.includes(optIdx)
+                                       : q.correctIndex === optIdx;
+                                     return (
+                                       <div
+                                         key={optIdx}
+                                         className={`p-4 rounded-2xl border-2 text-sm font-medium flex items-center gap-3 ${isCorrect ? 'border-green-100 bg-green-50 text-green-700' : 'border-slate-50 text-slate-500'}`}
+                                       >
+                                         <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${isCorrect ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                           {String.fromCharCode(65 + optIdx)}
+                                         </div>
+                                         {opt}
+                                         {isCorrect && <Check size={14} className="ml-auto" />}
+                                       </div>
+                                     );
+                                   })}
+                                 </div>
+                               </div>
+                             );
+                           })}
                         </div>
                       ) : (
                         <div className="py-20 text-center text-slate-300">
@@ -769,8 +811,8 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                   <div className="bg-white rounded-[40px] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                     <div className="bg-emcn-blue p-8 text-white relative">
-                      <h3 className="text-2xl font-serif">Nova Questão</h3>
-                      <p className="text-white/60 text-sm mt-1">Defina o enunciado e as opções de resposta.</p>
+                      <h3 className="text-2xl font-serif">{editingQuestionIndex !== null ? 'Editar Questão' : 'Nova Questão'}</h3>
+                      <p className="text-white/60 text-sm mt-1">Define o enunciado e as opções de resposta.</p>
                       <button onClick={() => setShowQuestionForm(false)} className="absolute top-8 right-8 text-white/50 hover:text-white transition-colors">
                         <X size={24} />
                       </button>
@@ -778,9 +820,36 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                     
                     <form onSubmit={async (e) => {
                       e.preventDefault();
+                      if (questionFormData.options.length < 2 || questionFormData.options.length > 5) {
+                        alert("A questão deve ter entre 2 e 5 opções.");
+                        return;
+                      }
+                      if (questionFormData.options.some(opt => !opt.trim())) {
+                        alert("Todas as opções devem ser preenchidas.");
+                        return;
+                      }
+                      if (questionFormData.type === 'MULTIPLE_CHOICE' && (!questionFormData.correctIndices || questionFormData.correctIndices.length === 0)) {
+                        alert("Selecione pelo menos uma alternativa correta para a questão de Múltipla Escolha.");
+                        return;
+                      }
+
                       setLoading(true);
                       try {
-                        const newQuestions = [...(selectedExam.questions || []), { ...questionFormData }];
+                        const normalizedQuestion: Question = {
+                          text: questionFormData.text,
+                          type: questionFormData.type || 'SINGLE_CHOICE',
+                          options: questionFormData.options,
+                          correctIndex: questionFormData.type === 'MULTIPLE_CHOICE' ? undefined : (questionFormData.correctIndex ?? 0),
+                          correctIndices: questionFormData.type === 'MULTIPLE_CHOICE' ? (questionFormData.correctIndices || []) : undefined
+                        };
+
+                        let newQuestions = [...(selectedExam.questions || [])];
+                        if (editingQuestionIndex !== null) {
+                          newQuestions[editingQuestionIndex] = normalizedQuestion;
+                        } else {
+                          newQuestions.push(normalizedQuestion);
+                        }
+
                         const { error } = await supabase.from('exams').update({ questions: newQuestions }).eq('id', selectedExam.id);
                         if (error) throw error;
                         
@@ -788,6 +857,8 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                         setSelectedExam(updatedExam);
                         setExams(prev => prev.map(ex => ex.id === updatedExam.id ? updatedExam : ex));
                         setShowQuestionForm(false);
+                        setEditingQuestionIndex(null);
+                        setQuestionFormData({ text: '', type: 'SINGLE_CHOICE', options: ['', '', '', ''], correctIndex: 0, correctIndices: [0] });
                       } catch (err: any) {
                         alert('Erro ao salvar questão: ' + err.message);
                       } finally {
@@ -806,38 +877,185 @@ const ClassesPage: React.FC<ClassesPageProps> = ({ classes, setClasses, students
                       </div>
 
                       <div className="space-y-4">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Opções e Resposta Correta</label>
-                        <div className="grid grid-cols-1 gap-3">
-                          {questionFormData.options.map((opt, idx) => (
-                            <div key={idx} className="flex gap-3">
-                              <button
-                                type="button"
-                                onClick={() => setQuestionFormData({ ...questionFormData, correctIndex: idx })}
-                                className={`w-12 h-14 rounded-xl flex items-center justify-center font-bold transition-all border-2 ${questionFormData.correctIndex === idx ? 'bg-green-600 border-green-600 text-white shadow-lg shadow-green-200' : 'bg-slate-50 border-transparent text-slate-400 hover:border-slate-200'}`}
-                              >
-                                {String.fromCharCode(65 + idx)}
-                              </button>
-                              <input
-                                required
-                                type="text"
-                                value={opt}
-                                onChange={(e) => {
-                                  const newOpts = [...questionFormData.options];
-                                  newOpts[idx] = e.target.value;
-                                  setQuestionFormData({ ...questionFormData, options: newOpts });
-                                }}
-                                className="flex-1 px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-emcn-gold focus:bg-white rounded-2xl outline-none transition-all font-medium"
-                                placeholder={`Opção ${String.fromCharCode(65 + idx)}...`}
-                              />
-                            </div>
+                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Pergunta</label>
+                        <div className="grid grid-cols-3 gap-3">
+                          {(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE'] as QuestionType[]).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => {
+                                let newOpts = [...questionFormData.options];
+                                if (t === 'TRUE_FALSE') {
+                                  newOpts = ['Verdadeiro', 'Falso'];
+                                } else {
+                                  if (newOpts.length < 2) newOpts = ['', ''];
+                                  if (newOpts.length > 5) newOpts = newOpts.slice(0, 5);
+                                  if (newOpts.length === 2 && newOpts[0] === 'Verdadeiro' && newOpts[1] === 'Falso') {
+                                    newOpts = ['', '', '', ''];
+                                  }
+                                }
+                                setQuestionFormData({
+                                  ...questionFormData,
+                                  type: t,
+                                  options: newOpts,
+                                  correctIndex: t === 'TRUE_FALSE' ? 0 : questionFormData.correctIndex ?? 0,
+                                  correctIndices: t === 'MULTIPLE_CHOICE' ? [0] : []
+                                });
+                              }}
+                              className={`px-4 py-3.5 rounded-2xl border-2 font-bold text-xs transition-all ${
+                                (questionFormData.type || 'SINGLE_CHOICE') === t
+                                  ? 'bg-emcn-blue border-emcn-blue text-white shadow-lg shadow-emcn-blue/20'
+                                  : 'bg-slate-50 border-transparent text-slate-500 hover:border-slate-200'
+                              }`}
+                            >
+                              {t === 'SINGLE_CHOICE' && 'Escolha Única'}
+                              {t === 'MULTIPLE_CHOICE' && 'Múltiplas Escolhas'}
+                              {t === 'TRUE_FALSE' && 'Verdadeiro ou Falso'}
+                            </button>
                           ))}
                         </div>
                       </div>
 
+                      {questionFormData.type === 'TRUE_FALSE' ? (
+                        <div className="space-y-3">
+                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Gabarito da Questão</label>
+                          {['Verdadeiro', 'Falso'].map((label, idx) => {
+                            const isCorrect = questionFormData.correctIndex === idx;
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setQuestionFormData({ ...questionFormData, correctIndex: idx })}
+                                className={`w-full p-5 rounded-2xl border-2 text-left font-bold transition-all flex items-center justify-between ${
+                                  isCorrect
+                                    ? 'bg-green-50 border-green-500 text-green-800 shadow-sm'
+                                    : 'bg-slate-50 border-transparent text-slate-500 hover:border-slate-200'
+                                }`}
+                              >
+                                <span>{label}</span>
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all ${
+                                  isCorrect ? 'bg-green-500 border-green-500 text-white scale-110' : 'border-slate-300 bg-white'
+                                }`}>
+                                  {isCorrect && <Check size={16} strokeWidth={4} />}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center">
+                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Opções de Resposta</label>
+                            {questionFormData.options.length < 5 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuestionFormData({
+                                    ...questionFormData,
+                                    options: [...questionFormData.options, '']
+                                  });
+                                }}
+                                className="text-xs font-bold text-emcn-gold hover:text-slate-800 transition-colors flex items-center gap-1"
+                              >
+                                <Plus size={14} /> Adicionar Opção
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-3">
+                            {questionFormData.options.map((opt, idx) => {
+                              const isMultiple = questionFormData.type === 'MULTIPLE_CHOICE';
+                              const isCorrect = isMultiple
+                                ? questionFormData.correctIndices?.includes(idx)
+                                : questionFormData.correctIndex === idx;
+
+                              return (
+                                <div key={idx} className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (isMultiple) {
+                                        const currentIndices = questionFormData.correctIndices || [];
+                                        const newIndices = currentIndices.includes(idx)
+                                          ? currentIndices.filter(i => i !== idx)
+                                          : [...currentIndices, idx];
+                                        setQuestionFormData({ ...questionFormData, correctIndices: newIndices });
+                                      } else {
+                                        setQuestionFormData({ ...questionFormData, correctIndex: idx });
+                                      }
+                                    }}
+                                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all font-bold ${
+                                      isCorrect
+                                        ? 'bg-green-500 text-white shadow-md shadow-green-500/20 scale-105'
+                                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                    }`}
+                                    title={isMultiple ? "Marcar como uma das corretas" : "Marcar como correta"}
+                                  >
+                                    {String.fromCharCode(65 + idx)}
+                                  </button>
+                                  <input
+                                    required
+                                    type="text"
+                                    value={opt}
+                                    onChange={(e) => {
+                                      const newOpts = [...questionFormData.options];
+                                      newOpts[idx] = e.target.value;
+                                      setQuestionFormData({ ...questionFormData, options: newOpts });
+                                    }}
+                                    className={`flex-1 px-5 py-3 border-2 rounded-xl outline-none transition-all font-medium ${
+                                      isCorrect
+                                        ? 'bg-green-50/30 border-green-200 focus:border-green-500'
+                                        : 'bg-slate-50 border-transparent focus:border-emcn-gold focus:bg-white'
+                                    }`}
+                                    placeholder={`Opção ${String.fromCharCode(65 + idx)}`}
+                                  />
+                                  {questionFormData.options.length > 2 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newOpts = questionFormData.options.filter((_, i) => i !== idx);
+                                        let newCorrectIndex = questionFormData.correctIndex ?? 0;
+                                        if (newCorrectIndex >= newOpts.length) {
+                                          newCorrectIndex = newOpts.length - 1;
+                                        }
+                                        const newCorrectIndices = (questionFormData.correctIndices || [])
+                                          .filter(i => i !== idx)
+                                          .map(i => (i > idx ? i - 1 : i));
+
+                                        setQuestionFormData({
+                                          ...questionFormData,
+                                          options: newOpts,
+                                          correctIndex: newCorrectIndex,
+                                          correctIndices: newCorrectIndices
+                                        });
+                                      }}
+                                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                                      title="Remover opção"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-slate-500 mt-2 bg-blue-50 text-blue-800 p-3 rounded-lg">
+                            <AlertCircle size={14} />
+                            <span>
+                              {questionFormData.type === 'MULTIPLE_CHOICE'
+                                ? "Clique na letra (A, B, C...) para marcar uma ou mais opções corretas (Checkboxes)."
+                                : "Clique na letra (A, B, C...) para definir a única opção correta (Rádio)."}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="pt-4 flex gap-4">
                         <button
                           type="button"
-                          onClick={() => setShowQuestionForm(false)}
+                          onClick={() => {
+                            setShowQuestionForm(false);
+                            setEditingQuestionIndex(null);
+                          }}
                           className="flex-1 px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
                         >
                           Cancelar

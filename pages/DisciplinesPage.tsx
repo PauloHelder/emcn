@@ -200,11 +200,29 @@ const DisciplinesPage: React.FC<DisciplinesPageProps> = ({ disciplines, setDisci
     if (!selectedExam) return;
     setLoading(true);
     try {
-      const gradeEntries = Object.entries(editingGrades).map(([studentId, score]) => ({
-        exam_id: selectedExam.id,
-        student_id: studentId,
-        score: score
-      }));
+      // Fetch existing grades first to preserve other fields (answers, comments)
+      const { data: existingGrades } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('exam_id', selectedExam.id);
+
+      const existingGradesMap = new Map<string, any>();
+      if (existingGrades) {
+        existingGrades.forEach(g => {
+          existingGradesMap.set(g.student_id, g);
+        });
+      }
+
+      const gradeEntries = Object.entries(editingGrades).map(([studentId, score]) => {
+        const existing = existingGradesMap.get(studentId);
+        return {
+          exam_id: selectedExam.id,
+          student_id: studentId,
+          score: score,
+          answers: existing ? existing.answers : null,
+          comments: existing ? existing.comments : `Nota lançada/alterada em ${new Date().toLocaleString()}`
+        };
+      });
 
       // Delete existing grades for this exam and insert new ones (simpler than upserting individually)
       await supabase.from('grades').delete().eq('exam_id', selectedExam.id);

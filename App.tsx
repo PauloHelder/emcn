@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ClipboardList,
+  ClipboardCheck,
   Settings,
   Bell,
   UserPlus,
@@ -50,6 +51,7 @@ import StudentArea from './pages/StudentArea';
 import StudentEadPage from './pages/StudentEadPage';
 import ExamsPage from './pages/ExamsPage';
 import EadAdminPage from './pages/EadAdminPage';
+import ExamSubmissionsPage from './pages/ExamSubmissionsPage';
 import { supabase } from './supabase';
 
 interface LayoutProps {
@@ -76,6 +78,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, students, handle
     { path: '/escolas', label: 'Escolas', icon: SchoolIcon, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/ead-admin', label: 'EAD / Aulas', icon: Video, roles: ['ADMIN', 'TEACHER'] },
     { path: '/provas', label: 'Provas', icon: FileText, roles: ['ADMIN', 'SECRETARY'] },
+    { path: '/provas-submissoes', label: 'Provas Entregues', icon: ClipboardCheck, roles: ['ADMIN', 'SECRETARY', 'TEACHER'] },
     { path: '/usuarios', label: 'Usuários e Perfis', icon: ClipboardList, roles: ['ADMIN', 'SECRETARY'] },
     { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['ADMIN'] },
   ];
@@ -380,6 +383,7 @@ const App: React.FC = () => {
           )}
         </Layout> : <Navigate to="/login" />} />
         <Route path="/provas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamsPage classes={classes} disciplines={disciplines} schools={schools} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/provas-submissoes" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamSubmissionsPage classes={classes} disciplines={disciplines} students={students} /></Layout> : <Navigate to="/login" />} />
         <Route path="/ead-admin" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><EadAdminPage classes={classes} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
         <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>
