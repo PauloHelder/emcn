@@ -204,7 +204,7 @@ const App: React.FC = () => {
       ] = await Promise.all([
         supabase.from('teachers').select('*'),
         supabase.from('students').select('*'),
-        supabase.from('disciplines').select('*'),
+        supabase.from('disciplines').select('*').order('order_index', { ascending: true }),
         supabase.from('schools').select('*'),
         supabase.from('classes').select('*')
       ]);
@@ -409,7 +409,7 @@ const App: React.FC = () => {
         <Route path="/provas" element={currentUser ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamsPage classes={classes} disciplines={disciplines} schools={schools} /></Layout> : <Navigate to="/login" />} />
         <Route path="/provas-submissoes" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ExamSubmissionsPage classes={classes} disciplines={disciplines} students={students} /></Layout> : <Navigate to="/login" />} />
         <Route path="/pagamentos" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETARY') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><PaymentsPage classes={classes} students={students} /></Layout> : <Navigate to="/login" />} />
-        <Route path="/ead-admin" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><EadAdminPage classes={classes} disciplines={disciplines} /></Layout> : <Navigate to="/login" />} />
+        <Route path="/ead-admin" element={currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'TEACHER') ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><EadAdminPage classes={classes} disciplines={disciplines} setDisciplines={setDisciplines} /></Layout> : <Navigate to="/login" />} />
         <Route path="/configuracoes" element={currentUser && currentUser.role === 'ADMIN' ? <Layout currentUser={currentUser} students={students} handleLogout={handleLogout}><ConfigPage settings={enrollmentSettings} setSettings={setEnrollmentSettings} /></Layout> : <Navigate to="/login" />} />
       </Routes>
     </HashRouter>

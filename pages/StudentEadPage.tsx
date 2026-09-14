@@ -80,7 +80,7 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
       }
 
       // 3. Fetch disciplines
-      const { data: discData } = await supabase.from('disciplines').select('*');
+      const { data: discData } = await supabase.from('disciplines').select('*').order('order_index', { ascending: true });
       if (discData) {
         setDisciplines(discData);
       }
@@ -131,7 +131,8 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
   const getClassDisciplines = (): Discipline[] => {
     if (!selectedClass) return [];
     const ids = new Set(selectedClass.sessions.map(s => s.disciplineId));
-    return disciplines.filter(d => ids.has(d.id));
+    const filtered = disciplines.filter(d => ids.has(d.id));
+    return filtered.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
   };
 
   const handleMarkPresence = async (lessonId: string) => {

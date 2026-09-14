@@ -49,6 +49,7 @@ export interface Discipline {
   name: string;
   description: string;
   workload: number; // in hours
+  order_index?: number;
 }
 
 export type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';

@@ -54,12 +54,16 @@ CREATE TABLE IF NOT EXISTS public.ead_discipline_attachments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 6. Índices para melhorar a performance das queries
+-- 6. Índices e colunas adicionais para reordenação de disciplinas/matérias
+ALTER TABLE public.disciplines
+  ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS idx_ead_lessons_class_id ON public.ead_lessons(class_id);
 CREATE INDEX IF NOT EXISTS idx_ead_lessons_discipline_id ON public.ead_lessons(discipline_id);
 CREATE INDEX IF NOT EXISTS idx_ead_progress_student_id ON public.ead_progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_ead_progress_lesson_id ON public.ead_progress(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_ead_disc_att_class_disc ON public.ead_discipline_attachments(class_id, discipline_id);
+
 
 -- 7. Habilitar Realtime com verificação de segurança (Evita erro 42710 "already member")
 DO $$

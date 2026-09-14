@@ -10,9 +10,10 @@ import {
 interface EadAdminPageProps {
   classes: ClassGroup[];
   disciplines: Discipline[];
+  setDisciplines: React.Dispatch<React.SetStateAction<Discipline[]>>;
 }
 
-const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => {
+const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines, setDisciplines }) => {
   // Navigation state: Class → Discipline → Lessons
   const [selectedClass, setSelectedClass] = useState<ClassGroup | null>(null);
   const [selectedDisciplineId, setSelectedDisciplineId] = useState<string | null>(null);
@@ -215,6 +216,42 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
   };
 
   const getDisciplineName = (id: string) => disciplines.find(d => d.id === id)?.name || 'Desconhecida';
+
+  const handleMoveDisciplineOrder = async (disciplines: Discipline[], index: number, direction: 'UP' | 'DOWN') => {
+    if (direction === 'UP' && index === 0) return;
+    if (direction === 'DOWN' && index === disciplines.length - 1) return;
+
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    const current = disciplines[index];
+    const target = disciplines[targetIndex];
+
+    const currentOrder = current.order_index ?? (index + 1);
+    const targetOrder = target.order_index ?? (targetIndex + 1);
+
+    // Optimistic UI update
+    const updated = [...disciplines];
+    updated[index] = { ...current, order_index: targetOrder };
+    updated[targetIndex] = { ...target, order_index: currentOrder };
+    updated.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+    setDisciplines(prev => prev.map(d => {
+      const found = updated.find(u => u.id === d.id);
+      return found ? found : d;
+    }));
+
+    try {
+      const { error: e1 } = await supabase.from('disciplines').update({ order_index: targetOrder }).eq('id', current.id);
+      const { error: e2 } = await supabase.from('disciplines').update({ order_index: currentOrder }).eq('id', target.id);
+      if (e1 || e2) throw e1 || e2;
+    } catch (err: any) {
+      alert('Erro ao reordenar matéria: ' + err.message);
+      // Revert on error
+      setDisciplines(prev => prev.map(d => {
+        if (d.id === current.id) return current;
+        if (d.id === target.id) return target;
+        return d;
+      }));
+    }
+  };
 
   const handleSaveLesson = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -726,29 +763,59 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
             <p className="text-sm text-slate-400 mt-1">Adicione aulas ao cronograma desta turma para as disciplinas aparecerem aqui.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {classDisciplines.map(discipline => {
+          <div className="space-y-3">
+            {classDisciplines.map((discipline, idx) => {
               const count = lessonCounts[discipline.id] || 0;
               return (
-                <button
+                <div
                   key={discipline.id}
-                  onClick={() => setSelectedDisciplineId(discipline.id)}
-                  className="bg-white rounded-2xl border shadow-sm hover:shadow-lg hover:border-emcn-gold/30 transition-all p-6 text-left group"
+                  className="bg-white rounded-2xl border shadow-sm hover:shadow-md transition-shadow flex items-center gap-4 p-4"
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 bg-emcn-gold/10 rounded-2xl flex items-center justify-center group-hover:bg-emcn-gold group-hover:text-white transition-colors">
-                      <BookOpen size={20} className="text-emcn-gold group-hover:text-white transition-colors" />
-                    </div>
+                  {/* Reorder Controls */}
+                  <div className="flex flex-col items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 shrink-0">
+                    <button
+                      disabled={idx === 0}
+                      onClick={() => handleMoveDisciplineOrder(classDisciplines, idx, 'UP')}
+                      className="p-1 text-slate-500 hover:text-emcn-blue disabled:opacity-20 disabled:hover:text-slate-500 rounded-lg hover:bg-white transition-colors"
+                      title="Mover Matéria para Cima"
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <span className="text-[10px] font-black text-slate-400 leading-none">#{idx + 1}</span>
+                    <button
+                      disabled={idx === classDisciplines.length - 1}
+                      onClick={() => handleMoveDisciplineOrder(classDisciplines, idx, 'DOWN')}
+                      className="p-1 text-slate-500 hover:text-emcn-blue disabled:opacity-20 disabled:hover:text-slate-500 rounded-lg hover:bg-white transition-colors"
+                      title="Mover Matéria para Baixo"
+                    >
+                      <ChevronDown size={16} />
+                    </button>
+                  </div>
+
+                  {/* Discipline Icon */}
+                  <div className="w-12 h-12 bg-emcn-gold/10 rounded-2xl flex items-center justify-center shrink-0">
+                    <BookOpen size={20} className="text-emcn-gold" />
+                  </div>
+
+                  {/* Discipline Info */}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-slate-800 text-base truncate">{discipline.name}</h3>
+                    <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{discipline.description || 'Sem descrição'}</p>
+                  </div>
+
+                  {/* Count badge + Enter button */}
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${count > 0 ? 'bg-green-50 text-green-700' : 'bg-slate-50 text-slate-400'}`}>
                       {count} {count === 1 ? 'aula' : 'aulas'}
                     </span>
+                    <button
+                      onClick={() => setSelectedDisciplineId(discipline.id)}
+                      className="flex items-center gap-1.5 bg-emcn-blue hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-sm"
+                    >
+                      <Video size={13} /> Aulas <ChevronRight size={13} />
+                    </button>
                   </div>
-                  <h3 className="font-bold text-slate-800 text-base mb-1 group-hover:text-emcn-blue transition-colors">{discipline.name}</h3>
-                  <p className="text-xs text-slate-500 line-clamp-2">{discipline.description || 'Sem descrição'}</p>
-                  <div className="flex items-center gap-1 mt-4 text-xs text-emcn-gold font-bold group-hover:gap-2 transition-all">
-                    <Video size={13} /> Gerenciar Aulas <ChevronRight size={13} />
-                  </div>
-                </button>
+                </div>
               );
             })}
           </div>
