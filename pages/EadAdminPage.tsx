@@ -4,7 +4,7 @@ import { supabase } from '../supabase';
 import {
   BookOpen, Video, Plus, Edit, Trash2, ArrowLeft, Loader2, Save, X,
   ExternalLink, School, ChevronRight, PlayCircle, GraduationCap, Layers, Calendar,
-  Paperclip, FileText, Image as ImageIcon, Link as LinkIcon
+  Paperclip, FileText, Image as ImageIcon, Link as LinkIcon, ChevronUp, ChevronDown
 } from 'lucide-react';
 
 interface EadAdminPageProps {
@@ -71,9 +71,62 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
       .select('*')
       .eq('class_id', classId)
       .eq('discipline_id', disciplineId)
-      .order('order_index', { ascending: true });
-    if (!error && data) setLessons(data);
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      // Normalize order_index sequence if any 0 or duplicates exist
+      const normalized = data.map((item: EadLesson, idx: number) => ({
+        ...item,
+        order_index: item.order_index && item.order_index > 0 ? item.order_index : idx + 1
+      }));
+      setLessons(normalized);
+    }
     setLoading(false);
+  };
+
+  const handleMoveLessonOrder = async (index: number, direction: 'UP' | 'DOWN') => {
+    if (direction === 'UP' && index === 0) return;
+    if (direction === 'DOWN' && index === lessons.length - 1) return;
+
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    const currentLesson = lessons[index];
+    const targetLesson = lessons[targetIndex];
+
+    const currentOrder = currentLesson.order_index || (index + 1);
+    const targetOrder = targetLesson.order_index || (targetIndex + 1);
+
+    let newCurrentOrder = targetOrder;
+    let newTargetOrder = currentOrder;
+
+    if (newCurrentOrder === newTargetOrder) {
+      newCurrentOrder = direction === 'UP' ? targetIndex + 1 : targetIndex + 1;
+      newTargetOrder = index + 1;
+    }
+
+    try {
+      // Optimistic update
+      const updatedLessons = [...lessons];
+      updatedLessons[index] = { ...currentLesson, order_index: newCurrentOrder };
+      updatedLessons[targetIndex] = { ...targetLesson, order_index: newTargetOrder };
+      updatedLessons.sort((a, b) => a.order_index - b.order_index);
+      setLessons(updatedLessons);
+
+      // Save to Supabase
+      const { error: err1 } = await supabase.from('ead_lessons').update({ order_index: newCurrentOrder }).eq('id', currentLesson.id);
+      const { error: err2 } = await supabase.from('ead_lessons').update({ order_index: newTargetOrder }).eq('id', targetLesson.id);
+
+      if (err1 || err2) throw err1 || err2;
+
+      if (selectedClass && selectedDisciplineId) {
+        await fetchLessons(selectedClass.id, selectedDisciplineId);
+      }
+    } catch (err: any) {
+      alert('Erro ao reordenar aula: ' + err.message);
+      if (selectedClass && selectedDisciplineId) {
+        fetchLessons(selectedClass.id, selectedDisciplineId);
+      }
+    }
   };
 
   const fetchDisciplineAttachments = async (classId: string, disciplineId: string) => {
@@ -389,21 +442,47 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                         >
                           <ExternalLink size={12} /> Ver no YouTube
                         </a>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setLessonForm({ ...lesson, attachments: lesson.attachments || [] }); setShowLessonForm(true); }}
-                            className="p-2 text-slate-400 hover:text-emcn-blue hover:bg-slate-50 rounded-xl transition-colors"
-                            title="Editar"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteLesson(lesson.id)}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+
+                        <div className="flex items-center gap-3">
+                          {/* CONTROLE DE ORDENAÇÃO: MOVER PARA CIMA / MOVER PARA BAIXO */}
+                          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
+                            <button
+                              disabled={idx === 0}
+                              onClick={() => handleMoveLessonOrder(idx, 'UP')}
+                              className="p-1 text-slate-500 hover:text-emcn-blue disabled:opacity-20 disabled:hover:text-slate-500 rounded-lg hover:bg-white transition-colors"
+                              title="Mover para Cima (Subir Posição)"
+                            >
+                              <ChevronUp size={16} />
+                            </button>
+                            <span className="text-[10px] font-bold text-slate-400 px-1 uppercase tracking-tighter">
+                              #{lesson.order_index}
+                            </span>
+                            <button
+                              disabled={idx === lessons.length - 1}
+                              onClick={() => handleMoveLessonOrder(idx, 'DOWN')}
+                              className="p-1 text-slate-500 hover:text-emcn-blue disabled:opacity-20 disabled:hover:text-slate-500 rounded-lg hover:bg-white transition-colors"
+                              title="Mover para Baixo (Descer Posição)"
+                            >
+                              <ChevronDown size={16} />
+                            </button>
+                          </div>
+
+                          <div className="flex gap-1.5 border-l border-slate-200 pl-3">
+                            <button
+                              onClick={() => { setLessonForm({ ...lesson, attachments: lesson.attachments || [] }); setShowLessonForm(true); }}
+                              className="p-2 text-slate-400 hover:text-emcn-blue hover:bg-slate-50 rounded-xl transition-colors"
+                              title="Editar Aula"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteLesson(lesson.id)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                              title="Excluir Aula"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
