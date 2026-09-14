@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { EadLesson, ClassGroup, Discipline } from '../types';
+import { EadLesson, ClassGroup, Discipline, EadAttachment, EadDisciplineAttachment } from '../types';
 import { supabase } from '../supabase';
 import {
   BookOpen, Video, Plus, Edit, Trash2, ArrowLeft, Loader2, Save, X,
-  ExternalLink, School, ChevronRight, PlayCircle, GraduationCap, Layers, Calendar
+  ExternalLink, School, ChevronRight, PlayCircle, GraduationCap, Layers, Calendar,
+  Paperclip, FileText, Image as ImageIcon, Link as LinkIcon
 } from 'lucide-react';
 
 interface EadAdminPageProps {
@@ -21,9 +22,19 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
   const [lessonCounts, setLessonCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
 
+  // Discipline Attachments state
+  const [disciplineAttachments, setDisciplineAttachments] = useState<EadDisciplineAttachment[]>([]);
+  const [showDisciplineAttModal, setShowDisciplineAttModal] = useState(false);
+  const [discAttForm, setDiscAttForm] = useState<{ title: string; url: string; type: 'DOCUMENT' | 'IMAGE' }>({
+    title: '',
+    url: '',
+    type: 'DOCUMENT'
+  });
+  const [savingDiscAtt, setSavingDiscAtt] = useState(false);
+
   // Lesson form
   const [showLessonForm, setShowLessonForm] = useState(false);
-  const [lessonForm, setLessonForm] = useState<Partial<EadLesson>>({});
+  const [lessonForm, setLessonForm] = useState<Partial<EadLesson>>({ attachments: [] });
   const [saving, setSaving] = useState(false);
 
   // Fetch lesson counts for all class+discipline combos when a class is selected
@@ -32,10 +43,11 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
     fetchLessonCounts(selectedClass.id);
   }, [selectedClass?.id]);
 
-  // Fetch lessons when a discipline is selected
+  // Fetch lessons & discipline attachments when a discipline is selected
   useEffect(() => {
     if (!selectedClass || !selectedDisciplineId) return;
     fetchLessons(selectedClass.id, selectedDisciplineId);
+    fetchDisciplineAttachments(selectedClass.id, selectedDisciplineId);
   }, [selectedClass?.id, selectedDisciplineId]);
 
   const fetchLessonCounts = async (classId: string) => {
@@ -64,6 +76,85 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
     setLoading(false);
   };
 
+  const fetchDisciplineAttachments = async (classId: string, disciplineId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('ead_discipline_attachments')
+        .select('*')
+        .eq('class_id', classId)
+        .eq('discipline_id', disciplineId)
+        .order('created_at', { ascending: true });
+      if (!error && data) {
+        setDisciplineAttachments(data);
+      }
+    } catch (err) {
+      console.error('Error fetching discipline attachments:', err);
+    }
+  };
+
+  const handleSaveDisciplineAttachment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClass || !selectedDisciplineId) return;
+    if (!discAttForm.title.trim() || !discAttForm.url.trim()) return;
+
+    setSavingDiscAtt(true);
+    try {
+      const payload = {
+        class_id: selectedClass.id,
+        discipline_id: selectedDisciplineId,
+        title: discAttForm.title.trim(),
+        url: discAttForm.url.trim(),
+        type: discAttForm.type
+      };
+
+      const { error } = await supabase.from('ead_discipline_attachments').insert([payload]);
+      if (error) throw error;
+
+      await fetchDisciplineAttachments(selectedClass.id, selectedDisciplineId);
+      setShowDisciplineAttModal(false);
+      setDiscAttForm({ title: '', url: '', type: 'DOCUMENT' });
+    } catch (err: any) {
+      alert('Erro ao salvar anexo da matéria: ' + err.message);
+    } finally {
+      setSavingDiscAtt(false);
+    }
+  };
+
+  const handleDeleteDisciplineAttachment = async (id: string) => {
+    if (!confirm('Deseja excluir este anexo da matéria?')) return;
+    try {
+      const { error } = await supabase.from('ead_discipline_attachments').delete().eq('id', id);
+      if (error) throw error;
+      setDisciplineAttachments(prev => prev.filter(a => a.id !== id));
+    } catch (err: any) {
+      alert('Erro ao excluir anexo: ' + err.message);
+    }
+  };
+
+  // Lesson attachment handlers
+  const handleAddLessonAttachment = () => {
+    const current = lessonForm.attachments || [];
+    setLessonForm(prev => ({
+      ...prev,
+      attachments: [
+        ...current,
+        { id: 'att_' + Date.now(), title: '', url: '', type: 'DOCUMENT' }
+      ]
+    }));
+  };
+
+  const handleRemoveLessonAttachment = (index: number) => {
+    const current = [...(lessonForm.attachments || [])];
+    current.splice(index, 1);
+    setLessonForm(prev => ({ ...prev, attachments: current }));
+  };
+
+  const handleLessonAttachmentChange = (index: number, field: keyof EadAttachment, value: string) => {
+    const current = [...(lessonForm.attachments || [])];
+    current[index] = { ...current[index], [field]: value };
+    setLessonForm(prev => ({ ...prev, attachments: current }));
+  };
+
   // Get unique discipline IDs used in this class's sessions
   const getClassDisciplines = (cls: ClassGroup): Discipline[] => {
     const ids = new Set(cls.sessions.map(s => s.disciplineId));
@@ -77,6 +168,8 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
     if (!selectedClass || !selectedDisciplineId) return;
     setSaving(true);
     try {
+      const validAttachments = (lessonForm.attachments || []).filter(a => a.title.trim() && a.url.trim());
+
       const payload = {
         class_id: selectedClass.id,
         discipline_id: selectedDisciplineId,
@@ -86,7 +179,9 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
         cover_image_url: lessonForm.cover_image_url || null,
         order_index: lessonForm.order_index || lessons.length + 1,
         lesson_date: lessonForm.lesson_date || null,
+        attachments: validAttachments
       };
+
       if (lessonForm.id) {
         const { error } = await supabase.from('ead_lessons').update(payload).eq('id', lessonForm.id);
         if (error) throw error;
@@ -97,7 +192,7 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
       await fetchLessons(selectedClass.id, selectedDisciplineId);
       await fetchLessonCounts(selectedClass.id);
       setShowLessonForm(false);
-      setLessonForm({});
+      setLessonForm({ attachments: [] });
     } catch (err: any) {
       alert('Erro ao salvar aula: ' + err.message);
     } finally {
@@ -135,6 +230,7 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
             <ChevronRight size={14} />
             <span className="text-slate-700 font-bold">{getDisciplineName(selectedDisciplineId)}</span>
           </div>
+
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-emcn-gold/10 rounded-2xl flex items-center justify-center">
@@ -145,12 +241,70 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                 <p className="text-sm text-slate-500">{selectedClass.name} · {lessons.length} aulas em vídeo</p>
               </div>
             </div>
+            
             <button
-              onClick={() => { setLessonForm({ order_index: lessons.length + 1, lesson_date: new Date().toISOString().split('T')[0] }); setShowLessonForm(true); }}
+              onClick={() => { setLessonForm({ order_index: lessons.length + 1, lesson_date: new Date().toISOString().split('T')[0], attachments: [] }); setShowLessonForm(true); }}
               className="bg-emcn-blue text-white px-5 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition-colors flex items-center gap-2 shadow-lg shadow-emcn-blue/20"
             >
               <Plus size={18} /> Nova Aula
             </button>
+          </div>
+
+          {/* SECTION: ANEXOS DA MATÉRIA (POSICIONADO LOGO ABAIXO DO BOTÃO NOVA AULA) */}
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <Paperclip size={18} className="text-emcn-gold" />
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                  Anexos da Matéria / Apostilas Geral ({disciplineAttachments.length})
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowDisciplineAttModal(true)}
+                className="bg-emcn-gold/10 hover:bg-emcn-gold hover:text-white text-emcn-gold text-xs font-bold px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+              >
+                <Plus size={14} /> Adicionar Anexo à Matéria
+              </button>
+            </div>
+
+            {disciplineAttachments.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {disciplineAttachments.map(att => (
+                  <div key={att.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="flex items-center gap-2.5 overflow-hidden">
+                      {att.type === 'IMAGE' ? (
+                        <ImageIcon size={16} className="text-blue-500 shrink-0" />
+                      ) : (
+                        <FileText size={16} className="text-amber-600 shrink-0" />
+                      )}
+                      <span className="text-xs font-bold text-slate-700 truncate" title={att.title}>{att.title}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 text-emcn-blue hover:bg-white rounded-lg transition-colors text-xs font-bold flex items-center gap-1"
+                        title="Abrir anexo"
+                      >
+                        <ExternalLink size={13} />
+                      </a>
+                      <button
+                        onClick={() => handleDeleteDisciplineAttachment(att.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
+                        title="Excluir anexo"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">
+                Nenhum anexo geral cadastrado nesta matéria ainda. Clique no botão acima para incluir apostilas ou livros da disciplina.
+              </p>
+            )}
           </div>
         </div>
 
@@ -161,6 +315,7 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
           <div className="space-y-4">
             {lessons.map((lesson, idx) => {
               const ytId = getYoutubeId(lesson.youtube_url);
+              const hasAttachments = lesson.attachments && lesson.attachments.length > 0;
               return (
                 <div key={lesson.id} className="bg-white rounded-2xl border shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                   <div className="flex flex-col sm:flex-row items-stretch">
@@ -197,9 +352,34 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                               <Calendar size={10} /> {new Date(lesson.lesson_date + 'T12:00:00').toLocaleDateString('pt-BR')}
                             </span>
                           )}
+                          {hasAttachments && (
+                            <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                              <Paperclip size={10} /> {lesson.attachments?.length} {lesson.attachments?.length === 1 ? 'anexo' : 'anexos'}
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-slate-500 mt-1 line-clamp-2">{lesson.description}</p>
                       </div>
+
+                      {/* Display Lesson Attachments if present */}
+                      {hasAttachments && (
+                        <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-slate-50">
+                          {lesson.attachments?.map((att, attIdx) => (
+                            <a
+                              key={attIdx}
+                              href={att.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] bg-slate-100 hover:bg-emcn-blue hover:text-white text-slate-700 font-bold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              {att.type === 'IMAGE' ? <ImageIcon size={11} /> : <FileText size={11} />}
+                              {att.title}
+                              <ExternalLink size={10} className="ml-0.5" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
                         <a
                           href={lesson.youtube_url}
@@ -211,7 +391,7 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                         </a>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => { setLessonForm(lesson); setShowLessonForm(true); }}
+                            onClick={() => { setLessonForm({ ...lesson, attachments: lesson.attachments || [] }); setShowLessonForm(true); }}
                             className="p-2 text-slate-400 hover:text-emcn-blue hover:bg-slate-50 rounded-xl transition-colors"
                             title="Editar"
                           >
@@ -242,18 +422,72 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
           </div>
         )}
 
-        {/* LESSON MODAL */}
+        {/* MODAL: ADICIONAR ANEXO À MATÉRIA */}
+        {showDisciplineAttModal && (
+          <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-emcn-gold p-6 text-white flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-bold">Adicionar Anexo à Matéria</h3>
+                  <p className="text-xs text-white/80 mt-0.5">{getDisciplineName(selectedDisciplineId)} · {selectedClass.name}</p>
+                </div>
+                <button onClick={() => setShowDisciplineAttModal(false)} className="hover:bg-white/10 p-2 rounded-xl transition-colors"><X size={20} /></button>
+              </div>
+              <form onSubmit={handleSaveDisciplineAttachment} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1 uppercase">Título do Anexo</label>
+                  <input
+                    required
+                    value={discAttForm.title}
+                    onChange={e => setDiscAttForm(p => ({ ...p, title: e.target.value }))}
+                    placeholder="Ex: Apostila Geral de Homilética"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-emcn-gold rounded-xl outline-none text-sm font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1 uppercase">Tipo de Ficheiro</label>
+                  <select
+                    value={discAttForm.type}
+                    onChange={e => setDiscAttForm(p => ({ ...p, type: e.target.value as any }))}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-emcn-gold rounded-xl outline-none text-sm font-medium"
+                  >
+                    <option value="DOCUMENT">📄 Documento (PDF, Word, Drive, etc.)</option>
+                    <option value="IMAGE">🖼️ Imagem (PNG, JPG, Esquema, etc.)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1 uppercase">Link / URL Externa do Anexo</label>
+                  <input
+                    type="url" required
+                    value={discAttForm.url}
+                    onChange={e => setDiscAttForm(p => ({ ...p, url: e.target.value }))}
+                    placeholder="https://drive.google.com/... ou https://..."
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-emcn-gold rounded-xl outline-none text-sm font-medium"
+                  />
+                </div>
+                <div className="flex gap-4 pt-4 border-t">
+                  <button type="button" onClick={() => setShowDisciplineAttModal(false)} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
+                  <button type="submit" disabled={savingDiscAtt} className="flex-1 py-3 bg-emcn-gold text-white font-bold rounded-xl shadow-lg hover:bg-[#b08e4d] transition-colors flex items-center justify-center gap-2">
+                    {savingDiscAtt ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Salvar Anexo
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: LESSON FORM (NOVA / EDITAR AULA) */}
         {showLessonForm && (
           <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-emcn-blue p-6 text-white flex justify-between items-center">
+            <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+              <div className="bg-emcn-blue p-6 text-white flex justify-between items-center shrink-0">
                 <div>
                   <h3 className="text-xl font-bold">{lessonForm.id ? 'Editar Aula' : 'Nova Aula em Vídeo'}</h3>
                   <p className="text-xs text-white/60 mt-0.5">{getDisciplineName(selectedDisciplineId)} · {selectedClass.name}</p>
                 </div>
-                <button onClick={() => { setShowLessonForm(false); setLessonForm({}); }} className="hover:bg-white/10 p-2 rounded-xl transition-colors"><X size={20} /></button>
+                <button onClick={() => { setShowLessonForm(false); setLessonForm({ attachments: [] }); }} className="hover:bg-white/10 p-2 rounded-xl transition-colors"><X size={20} /></button>
               </div>
-              <form onSubmit={handleSaveLesson} className="p-6 space-y-4">
+              <form onSubmit={handleSaveLesson} className="p-6 space-y-4 overflow-y-auto flex-1">
                 <div className="grid grid-cols-4 gap-4">
                   <div className="col-span-1">
                     <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Ordem</label>
@@ -275,6 +509,7 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                     />
                   </div>
                 </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Data Lecionada</label>
                   <input
@@ -284,6 +519,7 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-emcn-gold rounded-xl outline-none"
                   />
                 </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Link YouTube</label>
                   <input
@@ -294,6 +530,7 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-emcn-gold rounded-xl outline-none"
                   />
                 </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Descrição / Resumo</label>
                   <textarea
@@ -304,8 +541,69 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines }) => 
                     placeholder="Breve resumo do conteúdo desta aula..."
                   />
                 </div>
-                <div className="flex gap-4 pt-4 border-t">
-                  <button type="button" onClick={() => { setShowLessonForm(false); setLessonForm({}); }} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
+
+                {/* SECÇÃO: ANEXOS ESPECÍFICOS DA AULA */}
+                <div className="pt-3 border-t border-slate-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Paperclip size={14} className="text-emcn-gold" /> Anexos Específicos desta Aula
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddLessonAttachment}
+                      className="text-xs font-bold text-emcn-blue hover:underline flex items-center gap-1"
+                    >
+                      <Plus size={13} /> Add Anexo
+                    </button>
+                  </div>
+
+                  {(lessonForm.attachments || []).length > 0 ? (
+                    <div className="space-y-2.5">
+                      {(lessonForm.attachments || []).map((att, idx) => (
+                        <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 relative">
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="text"
+                              required
+                              placeholder="Título do anexo (ex: Slide Aula 1)"
+                              value={att.title}
+                              onChange={e => handleLessonAttachmentChange(idx, 'title', e.target.value)}
+                              className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-emcn-gold"
+                            />
+                            <select
+                              value={att.type}
+                              onChange={e => handleLessonAttachmentChange(idx, 'type', e.target.value as any)}
+                              className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none"
+                            >
+                              <option value="DOCUMENT">📄 Documento</option>
+                              <option value="IMAGE">🖼️ Imagem</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLessonAttachment(idx)}
+                              className="p-1 text-slate-400 hover:text-red-500 rounded-lg"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                          <input
+                            type="url"
+                            required
+                            placeholder="Link/URL do arquivo (https://...)"
+                            value={att.url}
+                            onChange={e => handleLessonAttachmentChange(idx, 'url', e.target.value)}
+                            className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-emcn-gold"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Nenhum anexo adicionado a esta vídeo-aula especificamente.</p>
+                  )}
+                </div>
+
+                <div className="flex gap-4 pt-4 border-t shrink-0">
+                  <button type="button" onClick={() => { setShowLessonForm(false); setLessonForm({ attachments: [] }); }} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
                   <button type="submit" disabled={saving} className="flex-1 py-3 bg-emcn-blue text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
                     {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Salvar Aula
                   </button>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { User, ClassGroup, Discipline, EadLesson, EadProgress } from '../types';
+import { User, ClassGroup, Discipline, EadLesson, EadProgress, EadAttachment, EadDisciplineAttachment } from '../types';
 import { supabase } from '../supabase';
 import {
   Video, BookOpen, CheckCircle2, PlayCircle, ArrowLeft, Loader2,
-  Calendar, Award, ChevronRight, X, ExternalLink, AlertCircle, Tv
+  Calendar, Award, ChevronRight, X, ExternalLink, AlertCircle, Tv,
+  Paperclip, FileText, Image as ImageIcon
 } from 'lucide-react';
 
 interface StudentEadPageProps {
@@ -17,6 +18,7 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline | null>(null);
   
   const [lessons, setLessons] = useState<EadLesson[]>([]);
+  const [disciplineAttachments, setDisciplineAttachments] = useState<EadDisciplineAttachment[]>([]);
   const [progress, setProgress] = useState<EadProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [lessonsLoading, setLessonsLoading] = useState(false);
@@ -101,6 +103,14 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
         .eq('discipline_id', disciplineId)
         .order('order_index', { ascending: true });
 
+      // Fetch discipline general attachments
+      const { data: discAttData } = await supabase
+        .from('ead_discipline_attachments')
+        .select('*')
+        .eq('class_id', classId)
+        .eq('discipline_id', disciplineId)
+        .order('created_at', { ascending: true });
+
       // Fetch student's progress for this student
       const { data: progressData } = await supabase
         .from('ead_progress')
@@ -108,6 +118,7 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
         .eq('student_id', studentId);
 
       if (lessonsData) setLessons(lessonsData);
+      if (discAttData) setDisciplineAttachments(discAttData);
       if (progressData) setProgress(progressData);
     } catch (err) {
       console.error('Error fetching lessons/progress:', err);
@@ -146,6 +157,7 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
     } finally {
       setMarkingPresence(false);
     }
+
   };
 
   const getYoutubeId = (url: string) => {
@@ -229,7 +241,7 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
             {studentClasses.map(c => (
               <button
                 key={c.id}
-                onClick={() => { setSelectedClass(c); setSelectedDiscipline(null); setLessons([]); }}
+                onClick={() => { setSelectedClass(c); setSelectedDiscipline(null); setLessons([]); setDisciplineAttachments([]); }}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-2 ${selectedClass?.id === c.id 
                   ? 'border-emcn-gold bg-emcn-gold/5 text-emcn-blue' 
                   : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
@@ -290,7 +302,7 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
           </div>
         </div>
 
-        {/* Right Column: Lessons list for selected discipline */}
+        {/* Right Column: Lessons & Attachments list for selected discipline */}
         <div className="lg:col-span-2 space-y-6">
           {selectedDiscipline ? (
             <>
@@ -303,6 +315,41 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
                 </span>
               </div>
 
+              {/* DISCIPLINE GENERAL ATTACHMENTS (MATERIAIS DA MATÉRIA) */}
+              {disciplineAttachments.length > 0 && (
+                <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-white p-6 rounded-[32px] border border-amber-200/80 shadow-sm space-y-3">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <Paperclip size={18} className="text-emcn-gold shrink-0" />
+                    <h4 className="font-bold text-sm uppercase tracking-wider">Apostilas & Materiais da Matéria</h4>
+                  </div>
+                  <p className="text-xs text-slate-600">Documentos e referências gerais disponibilizados pelo professor para esta disciplina:</p>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {disciplineAttachments.map(att => (
+                      <a
+                        key={att.id}
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-white hover:bg-emcn-gold hover:text-white text-slate-800 font-bold p-3.5 rounded-2xl border border-amber-100 shadow-sm hover:shadow-md transition-all flex items-center justify-between group"
+                      >
+                        <div className="flex items-center gap-2.5 overflow-hidden">
+                          {att.type === 'IMAGE' ? (
+                            <ImageIcon size={18} className="text-blue-500 group-hover:text-white shrink-0" />
+                          ) : (
+                            <FileText size={18} className="text-amber-600 group-hover:text-white shrink-0" />
+                          )}
+                          <span className="text-xs truncate">{att.title}</span>
+                        </div>
+                        <div className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0 ml-2">
+                          {att.type === 'IMAGE' ? 'Ver Imagem' : 'Abrir PDF'} <ExternalLink size={12} />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {lessonsLoading ? (
                 <div className="bg-white p-20 rounded-[32px] border shadow-sm flex items-center justify-center">
                   <Loader2 className="animate-spin text-emcn-blue" size={36} />
@@ -312,6 +359,7 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
                   {lessons.map(lesson => {
                     const ytId = getYoutubeId(lesson.youtube_url);
                     const completed = isCompleted(lesson.id);
+                    const hasAttachments = lesson.attachments && lesson.attachments.length > 0;
 
                     return (
                       <div 
@@ -375,6 +423,29 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
                               {lesson.description}
                             </p>
                           </div>
+
+                          {/* Lesson Specific Attachments Buttons */}
+                          {hasAttachments && (
+                            <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider w-full mb-1 flex items-center gap-1">
+                                <Paperclip size={11} className="text-emcn-gold" /> Anexos desta aula:
+                              </span>
+                              {lesson.attachments?.map((att, idx) => (
+                                <a
+                                  key={idx}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="bg-slate-100 hover:bg-emcn-blue hover:text-white text-slate-700 text-[11px] font-bold px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                                >
+                                  {att.type === 'IMAGE' ? <ImageIcon size={13} className="text-blue-500" /> : <FileText size={13} className="text-amber-600" />}
+                                  <span>{att.title}</span>
+                                  <span className="opacity-70 font-normal">({att.type === 'IMAGE' ? 'Ver Imagem' : 'Abrir PDF'})</span>
+                                  <ExternalLink size={10} className="ml-1" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
 
                           <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
                             <button
@@ -466,6 +537,39 @@ const StudentEadPage: React.FC<StudentEadPageProps> = ({ currentUser }) => {
                 <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider mb-2">Resumo da Aula</h4>
                 <p className="text-slate-650 text-sm leading-relaxed whitespace-pre-line">{activeLesson.description}</p>
               </div>
+
+              {/* Anexos da Aula dentro do Modal */}
+              {activeLesson.attachments && activeLesson.attachments.length > 0 && (
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Paperclip size={18} className="text-emcn-gold" />
+                    <h5 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Materiais & Anexos desta Aula</h5>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {activeLesson.attachments.map((att, idx) => (
+                      <a
+                        key={idx}
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-white hover:bg-emcn-blue hover:text-white text-slate-800 font-bold p-3.5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-center justify-between group"
+                      >
+                        <div className="flex items-center gap-2.5 overflow-hidden">
+                          {att.type === 'IMAGE' ? (
+                            <ImageIcon size={18} className="text-blue-500 group-hover:text-white shrink-0" />
+                          ) : (
+                            <FileText size={18} className="text-amber-600 group-hover:text-white shrink-0" />
+                          )}
+                          <span className="text-xs truncate">{att.title}</span>
+                        </div>
+                        <div className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0 ml-2">
+                          {att.type === 'IMAGE' ? 'Ver Imagem' : 'Abrir PDF'} <ExternalLink size={12} />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Status and attendance buttons */}
               <div className="bg-slate-50 p-6 rounded-3xl border flex flex-col sm:flex-row justify-between items-center gap-4">

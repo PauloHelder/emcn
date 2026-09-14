@@ -133,6 +133,24 @@ export interface EnrollmentSettings {
 
 // --- EAD Module Types ---
 
+export interface EadAttachment {
+  id: string;
+  title: string;
+  url: string;
+  type: 'DOCUMENT' | 'IMAGE';
+  created_at?: string;
+}
+
+export interface EadDisciplineAttachment {
+  id: string;
+  class_id: string;
+  discipline_id: string;
+  title: string;
+  url: string;
+  type: 'DOCUMENT' | 'IMAGE';
+  created_at: string;
+}
+
 export interface EadSubject {
   id: string;
   title: string;
@@ -154,6 +172,7 @@ export interface EadLesson {
   order_index: number;
   created_at: string;
   lesson_date?: string;
+  attachments?: EadAttachment[];
 }
 
 export interface EadProgress {
@@ -162,6 +181,7 @@ export interface EadProgress {
   lesson_id: string;
   completed_at: string;
 }
+
 
 export interface Municipality {
   id: string;
