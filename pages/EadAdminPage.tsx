@@ -209,46 +209,51 @@ const EadAdminPage: React.FC<EadAdminPageProps> = ({ classes, disciplines, setDi
     setLessonForm(prev => ({ ...prev, attachments: current }));
   };
 
-  // Get unique discipline IDs used in this class's sessions
+  // Get unique discipline IDs used in this class's sessions, sorted by order_index
   const getClassDisciplines = (cls: ClassGroup): Discipline[] => {
     const ids = new Set(cls.sessions.map(s => s.disciplineId));
-    return disciplines.filter(d => ids.has(d.id));
+    return disciplines
+      .filter(d => ids.has(d.id))
+      .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
   };
 
   const getDisciplineName = (id: string) => disciplines.find(d => d.id === id)?.name || 'Desconhecida';
 
-  const handleMoveDisciplineOrder = async (disciplines: Discipline[], index: number, direction: 'UP' | 'DOWN') => {
+  const handleMoveDisciplineOrder = async (list: Discipline[], index: number, direction: 'UP' | 'DOWN') => {
     if (direction === 'UP' && index === 0) return;
-    if (direction === 'DOWN' && index === disciplines.length - 1) return;
+    if (direction === 'DOWN' && index === list.length - 1) return;
 
     const targetIndex = direction === 'UP' ? index - 1 : index + 1;
-    const current = disciplines[index];
-    const target = disciplines[targetIndex];
 
-    const currentOrder = current.order_index ?? (index + 1);
-    const targetOrder = target.order_index ?? (targetIndex + 1);
+    // Normalize: assign sequential order_index from current visible positions
+    // This fixes the case where all order_index values are 0 or duplicated
+    const normalized = list.map((d, i) => ({ ...d, order_index: i + 1 }));
 
-    // Optimistic UI update
-    const updated = [...disciplines];
-    updated[index] = { ...current, order_index: targetOrder };
-    updated[targetIndex] = { ...target, order_index: currentOrder };
-    updated.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+    // Swap the two items
+    const newOrder = [...normalized];
+    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
+    // Re-assign sequential indices after swap
+    const reindexed = newOrder.map((d, i) => ({ ...d, order_index: i + 1 }));
+
+    // Optimistic UI update: merge reindexed back into global disciplines
     setDisciplines(prev => prev.map(d => {
-      const found = updated.find(u => u.id === d.id);
+      const found = reindexed.find(r => r.id === d.id);
       return found ? found : d;
     }));
 
+    // Persist only the two that changed positions
+    const a = reindexed[index];
+    const b = reindexed[targetIndex];
     try {
-      const { error: e1 } = await supabase.from('disciplines').update({ order_index: targetOrder }).eq('id', current.id);
-      const { error: e2 } = await supabase.from('disciplines').update({ order_index: currentOrder }).eq('id', target.id);
+      const { error: e1 } = await supabase.from('disciplines').update({ order_index: a.order_index }).eq('id', a.id);
+      const { error: e2 } = await supabase.from('disciplines').update({ order_index: b.order_index }).eq('id', b.id);
       if (e1 || e2) throw e1 || e2;
     } catch (err: any) {
       alert('Erro ao reordenar matéria: ' + err.message);
-      // Revert on error
+      // Revert optimistic update
       setDisciplines(prev => prev.map(d => {
-        if (d.id === current.id) return current;
-        if (d.id === target.id) return target;
-        return d;
+        const orig = list.find(o => o.id === d.id);
+        return orig ? orig : d;
       }));
     }
   };
